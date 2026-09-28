@@ -21,8 +21,9 @@ caller ──voice──▶ Vapi (speech ⇄ text) ──Custom LLM──▶ app
 - **MCP server** (built here): `search_knowledge_base`, `lookup_customer`, `lookup_transaction`, `lookup_payout`, `create_support_ticket`, `create_escalation`, `log_conversation_event`.
 - **Supabase** holds the seed customers, transactions and payouts, the 37 knowledge-base chunks, and every runtime record.
 
-The design, and the contradictions it resolves in the brief, are in
-[docs/PLAN.md](docs/PLAN.md).
+Design notes, the testing-evidence write-up and the one-pager live in
+`docs/`, which is kept out of version control on purpose. Ask the author for
+a copy.
 
 ## Layout
 
@@ -95,8 +96,7 @@ npm run eval -- --voice               # records scenario 9 from the latest real 
 ```
 
 The eval starts a local MCP server if none is running. Results are at
-`/review/evals`, and [docs/testing-evidence.md](docs/testing-evidence.md) has
-the SQL for each evidence row.
+`/review/evals`.
 
 **Model gate:** the agent runs on `claude-haiku-4-5`. If a scenario fails
 repeatedly and prompt fixes don't help, set `AGENT_MODEL=claude-sonnet-5`

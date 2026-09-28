@@ -7,9 +7,6 @@
     "packages/*"
   ],
   "scripts": {
-    "spike:mcp": "tsx spikes/mcp-stub.ts",
-    "spike:agent": "tsx spikes/agent-latency.ts",
-    "spike:vapi": "tsx spikes/vapi-echo.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:retrieval": "tsx --test tests/retrieval.test.ts",
     "typecheck": "tsc -p .",
