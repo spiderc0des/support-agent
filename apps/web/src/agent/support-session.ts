@@ -136,7 +136,16 @@ export class SupportSession {
   /** Turns sent to this session so far. The first one carries the per-call context. */
   turnsSent = 0;
 
-  /** Spawn the agent process. Safe to call more than once; resolves when the session has initialised. */
+  /**
+   * Spawn the agent process. Safe to call more than once.
+   *
+   * The returned promise resolves on the SDK's `init` message, which the SDK
+   * only sends AFTER it receives the first user message. So nothing may wait
+   * on this before sending that message: sendTurn() pushes first and lets
+   * init arrive during the turn. (Awaiting it first deadlocked every call.)
+   * Calling start() early still helps: the CLI process spawns and connects
+   * to the MCP server while the greeting plays.
+   */
   start(): Promise<void> {
     if (this.ready) return this.ready;
     const t0 = Date.now();
@@ -175,8 +184,13 @@ export class SupportSession {
         includePartialMessages: true,
         persistSession: false,
         maxBudgetUsd: this.config.budgetUsd ?? Number(process.env.CALL_BUDGET_USD ?? 0.5),
-        // Latency over depth: voice turns are short and rule-guided.
-        ...(this.model.startsWith("claude-haiku") ? {} : { effort: "low" as const }),
+        // Latency over depth: voice turns are short and rule-guided. Without
+        // this the SDK runs Haiku with extended thinking, which measured
+        // 2-3 s of silence per model request. Sonnet 5 keeps adaptive
+        // thinking at low effort.
+        ...(this.model.startsWith("claude-haiku")
+          ? { thinking: { type: "disabled" as const } }
+          : { effort: "low" as const }),
         env: { ...process.env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" } as Record<string, string>,
       },
     });
@@ -202,11 +216,15 @@ export class SupportSession {
    */
   async sendTurn(userText: string, onText: (text: string) => void, opts: { timeoutMs?: number; callerEmails?: string[] } = {}): Promise<TurnResult> {
     if (this.closed) throw new Error(this.fatalError ?? "Session is closed");
-    await this.start();
+    // Not awaited: init only arrives after this turn's message is sent. A
+    // failure to start settles the turn through consume()'s error path.
+    this.start().catch(() => {});
     if (this.current) throw new Error("A turn is already in progress; interrupt it first");
     this.lastActivity = Date.now();
 
-    const timeoutMs = opts.timeoutMs ?? 25_000;
+    // Under Vapi's own custom-LLM cutoff (about 20 s, observed): the caller
+    // must hear our fallback reply before Vapi abandons the call.
+    const timeoutMs = opts.timeoutMs ?? 15_000;
     return new Promise<TurnResult>((resolve) => {
       let markDone: () => void = () => {};
       const turn: PendingTurn = {

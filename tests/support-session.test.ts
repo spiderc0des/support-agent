@@ -29,9 +29,10 @@ function fakeQuery(scripts: Script[]) {
       emit({ type: "result", subtype, total_cost_usd: cost, usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 5000, cache_creation_input_tokens: 0 } });
 
     void (async () => {
-      emit({ type: "system", subtype: "init" });
       let i = 0;
       for await (const _msg of params.prompt) {
+        // Like the real SDK: init comes only after the first user message.
+        if (i === 0) emit({ type: "system", subtype: "init" });
         const s = scripts[i++];
         for (const step of s.steps) {
           if (step.kind === "text") emit({ type: "stream_event", parent_tool_use_id: null, event: { type: "content_block_delta", delta: { type: "text_delta", text: step.text } } });
