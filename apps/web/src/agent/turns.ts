@@ -113,10 +113,8 @@ export async function runTurn(input: RunTurnInput): Promise<TurnResult & { turnI
 
   // Barge-in: the caller spoke again while the last reply was still being
   // produced. Stop it; the new utterance is what matters now.
-  if (session.isBusy) {
-    await session.interrupt();
-    for (let i = 0; i < 40 && session.isBusy; i++) await new Promise((r) => setTimeout(r, 50));
-  }
+  // interrupt() resolves once the previous turn is settled (by force if need be).
+  if (session.isBusy) await session.interrupt();
 
   const turnIndex = await beginTurn(conversationId);
   const earlier = await callerTranscripts(conversationId);

@@ -63,7 +63,7 @@ Authentication → Emails. Then add `<app>/auth/confirm` (and
 ### 2. Check everything offline first
 
 ```bash
-npm run check          # typecheck + lint:skills + 50 tests (no keys, no network, no cost)
+npm run check          # typecheck + lint:skills + 55 tests (no keys, no network, no cost)
 npm run prompt:size    # cached prefix must stay above Haiku's 4,096-token cache minimum
 ```
 

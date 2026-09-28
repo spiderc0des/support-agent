@@ -43,6 +43,11 @@ export type SessionConfig = {
   maxToolCallsPerTurn?: number;
   /** Called when the agent reaches for a tool outside its surface. */
   onDeniedTool?: (toolName: string) => void;
+  /** Tests substitute a fake Agent SDK here; production uses the real `query`. */
+  queryFn?: typeof query;
+  /** Tests pass a stub prompt so they don't depend on the skill files. */
+  systemPrompt?: string;
+  interruptGraceMs?: number;
 };
 
 export type TurnResult = {
@@ -69,7 +74,12 @@ type PendingTurn = {
   interrupted: boolean;
   timedOut: boolean;
   errorMessage: string | null;
+  /** Resolves once the turn has been settled, by its result or by force. */
+  done: Promise<void>;
 };
+
+/** How long an interrupted turn may take to produce its result before it is settled by force. */
+const INTERRUPT_GRACE_MS = 3_000;
 
 /** Minimal push-based async queue: one side writes, one side iterates. */
 class AsyncQueue<T> implements AsyncIterable<T> {
@@ -140,11 +150,11 @@ export class SupportSession {
       return { behavior: "deny", message: `'${toolName}' is not available. Only the RelayPay support tools are.` };
     };
 
-    this.q = query({
+    this.q = (this.config.queryFn ?? query)({
       prompt: this.input,
       options: {
         model: this.model,
-        systemPrompt: buildSystemPrompt(),
+        systemPrompt: this.config.systemPrompt ?? buildSystemPrompt(),
         // No built-in tools, no project or user settings, no skills tool:
         // the RelayPay MCP server is the agent's entire surface.
         tools: [],
@@ -198,6 +208,7 @@ export class SupportSession {
 
     const timeoutMs = opts.timeoutMs ?? 25_000;
     return new Promise<TurnResult>((resolve) => {
+      let markDone: () => void = () => {};
       const turn: PendingTurn = {
         filter: new SpeechFilter(opts.callerEmails ?? []),
         startedAt: Date.now(),
@@ -208,36 +219,64 @@ export class SupportSession {
           if (turn.firstTokenAt === null) turn.firstTokenAt = Date.now();
           onText(text);
         },
-        finish: resolve,
+        finish: () => {},
         interrupted: false,
         timedOut: false,
         errorMessage: null,
+        done: new Promise<void>((r) => (markDone = r)),
       };
-      this.current = turn;
       const timer = setTimeout(() => {
         turn.timedOut = true;
         void this.interrupt();
       }, timeoutMs);
-      const originalFinish = turn.finish;
+      let settled = false;
       turn.finish = (r) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
-        originalFinish(r);
+        resolve(r);
+        markDone();
       };
+      this.current = turn;
       this.turnsSent++;
       this.input.push({ type: "user", message: { role: "user", content: userText }, parent_tool_use_id: null });
     });
   }
 
-  /** Stop the turn in progress (caller barged in, or it ran too long). */
+  /**
+   * Stop the turn in progress (caller barged in, or it ran too long), and
+   * resolve once it is settled. If the agent does not produce the turn's
+   * result within a short grace period, the turn is settled by force and its
+   * late result, if one ever comes, is discarded rather than mistaken for
+   * the next turn's.
+   */
   async interrupt(): Promise<void> {
-    if (!this.current || !this.q) return;
-    this.current.interrupted = true;
+    const turn = this.current;
+    if (!turn || !this.q) return;
+    turn.interrupted = true;
     try {
       await this.q.interrupt();
     } catch {
       // Already finished; the result handler settles the turn.
     }
+    const grace = this.config.interruptGraceMs ?? INTERRUPT_GRACE_MS;
+    const graceOver = new Promise<"grace">((r) => setTimeout(() => r("grace"), grace));
+    if ((await Promise.race([turn.done.then(() => "done" as const), graceOver])) === "grace" && this.current === turn) {
+      this.current = null;
+      this.orphanedResults++;
+      this.orphanExpiry = Date.now() + 10_000;
+      turn.push(turn.filter.flush());
+      turn.finish(this.settle(turn, turn.timedOut ? "timeout" : "interrupted", turn.errorMessage, 0, null));
+    }
   }
+
+  /**
+   * Results still owed by turns that were settled by force. Expires quickly:
+   * if a forced turn never produces its result, the counter must not swallow
+   * a later turn's.
+   */
+  private orphanedResults = 0;
+  private orphanExpiry = 0;
 
   close() {
     if (this.closed) return;
@@ -290,6 +329,14 @@ export class SupportSession {
     for await (const m of this.q!) {
       if (m.type === "system" && m.subtype === "init") {
         onInit();
+        continue;
+      }
+      // A result owed by a turn that was already settled by force (see
+      // interrupt()), or one with no turn waiting: keep the cost baseline
+      // right, and don't hand it to whichever turn is current now.
+      if (m.type === "result" && (!this.current || (this.orphanedResults > 0 && Date.now() < this.orphanExpiry))) {
+        if (this.current) this.orphanedResults--;
+        this.lastTotalCost = m.total_cost_usd ?? this.lastTotalCost;
         continue;
       }
       const turn = this.current;

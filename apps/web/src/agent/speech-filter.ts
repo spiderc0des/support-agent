@@ -137,7 +137,9 @@ export class SpeechFilter {
     if (cut === 0) return "";
     const ready = body.slice(0, cut);
     this.pending = this.pending.slice(cut);
-    const { text, redactions } = redact(ready.replace(TAG_RE, ""), this.callerEmails);
+    const { text: redacted, redactions } = redact(ready.replace(TAG_RE, ""), this.callerEmails);
+    // Where the pre-tool sentence meets the post-tool text, don't double the space.
+    const text = /\s$/.test(this.spoken) ? redacted.replace(/^\s+/, "") : redacted;
     this.redactions.push(...redactions);
     this.spoken += text;
     return text;
