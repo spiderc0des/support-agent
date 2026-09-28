@@ -1,0 +1,13 @@
+<!--
+  Supabase → Authentication → Emails → Invite user
+  Subject: You're invited to the RelayPay support review dashboard
+-->
+<div style="font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; background:#f5f6f8; padding:32px 16px;">
+  <div style="max-width:480px; margin:0 auto; background:#ffffff; border:1px solid #dde2e8; border-radius:10px; padding:28px;">
+    <p style="margin:0 0 16px; color:#17365d; font-weight:600; font-size:18px;">RelayPay</p>
+    <p style="margin:0 0 20px; color:#1b2430; font-size:15px; line-height:1.5;">You've been given access to the RelayPay support review dashboard: conversation logs, tool calls, tickets, escalations and evaluations.</p>
+    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/review"
+       style="display:inline-block; background:#17365d; color:#ffffff; text-decoration:none; font-weight:600; padding:12px 22px; border-radius:10px;">Accept and sign in</a>
+    <p style="margin:20px 0 0; color:#5b6675; font-size:13px;">The link works once. After that, sign in from /login.</p>
+  </div>
+</div>

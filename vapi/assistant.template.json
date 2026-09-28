@@ -1,0 +1,29 @@
+{
+  "name": "RelayPay Support",
+  "firstMessage": "Hi, you've reached RelayPay support. How can I help you today?",
+  "firstMessageMode": "assistant-speaks-first",
+  "model": {
+    "provider": "custom-llm",
+    "url": "${APP_URL}/api/vapi",
+    "model": "relaypay-support-agent"
+  },
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-3",
+    "language": "en",
+    "keyterm": ["RelayPay", "LagosLedger", "NairobiOps", "AccraStack", "CapeCloud", "KigaliWorks", "TXN", "payout", "KYC"]
+  },
+  "voice": {
+    "provider": "vapi",
+    "voiceId": "Elliot"
+  },
+  "server": {
+    "url": "${APP_URL}/api/vapi/events",
+    "headers": { "x-vapi-secret": "${VAPI_WEBHOOK_SECRET}" }
+  },
+  "serverMessages": ["status-update", "end-of-call-report", "user-interrupted"],
+  "silenceTimeoutSeconds": 30,
+  "maxDurationSeconds": 900,
+  "endCallMessage": "Thanks for calling RelayPay. Goodbye.",
+  "backgroundSound": "off"
+}

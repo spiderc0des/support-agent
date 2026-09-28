@@ -24,7 +24,9 @@
     "web:dev": "npm run dev -w @relaypay/web",
     "web:build": "npm run build -w @relaypay/web",
     "web:start": "npm run start -w @relaypay/web",
-    "check": "npm run typecheck && npm run lint:skills && npm test"
+    "check": "npm run typecheck && npm run lint:skills && npm test",
+    "seed:admin": "tsx scripts/seed-admin.ts",
+    "vapi:sync": "tsx scripts/vapi-sync.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

@@ -1,0 +1,19 @@
+# MCP service: the RelayPay support tools over Streamable HTTP (POST /mcp).
+# Stateless, so it can run more than one replica.
+#
+# Railway: set RAILWAY_DOCKERFILE_PATH=Dockerfile.mcp on this service.
+# The web service reaches it over private networking
+# (MCP_URL=http://<service>.railway.internal:<PORT>/mcp); a public domain is
+# optional and only needed for the "deployed endpoint" deliverable.
+FROM node:22-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/
+COPY apps/mcp-server/package.json apps/mcp-server/
+COPY packages/shared/package.json packages/shared/
+RUN npm ci --omit=dev
+COPY packages ./packages
+COPY apps/mcp-server ./apps/mcp-server
+EXPOSE 8788
+CMD ["npx", "tsx", "apps/mcp-server/src/http.ts"]

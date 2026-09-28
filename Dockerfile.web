@@ -1,0 +1,48 @@
+# Web service: voice page, Vapi endpoints, review dashboard, and the agent
+# sessions, in one long-lived Node process.
+#
+# NOT a `standalone` build: the Agent SDK spawns the Claude Code CLI and
+# resolves a platform-specific binary at runtime, which the standalone
+# tracer does not follow (week 5). Full node_modules ships instead.
+#
+# Railway: set RAILWAY_DOCKERFILE_PATH=Dockerfile.web on this service,
+# 1 replica (live sessions are held in memory), 1 GB+ memory.
+FROM node:22-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/
+COPY apps/mcp-server/package.json apps/mcp-server/
+COPY packages/shared/package.json packages/shared/
+RUN npm ci
+
+FROM deps AS builder
+COPY . .
+# NEXT_PUBLIC_* are inlined into the browser bundle at build time, so they
+# must be present here; Railway passes service variables as build args.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_VAPI_PUBLIC_KEY
+ARG NEXT_PUBLIC_VAPI_ASSISTANT_ID
+ARG NEXT_PUBLIC_SUPPORT_PHONE
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
+    NEXT_PUBLIC_VAPI_PUBLIC_KEY=$NEXT_PUBLIC_VAPI_PUBLIC_KEY \
+    NEXT_PUBLIC_VAPI_ASSISTANT_ID=$NEXT_PUBLIC_VAPI_ASSISTANT_ID \
+    NEXT_PUBLIC_SUPPORT_PHONE=$NEXT_PUBLIC_SUPPORT_PHONE
+RUN npm run build -w @relaypay/web
+
+FROM node:22-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+# Where the skills live. If .claude/ is missing, sessions refuse to start
+# ("Skills failed to load") rather than run skill-less.
+ENV AGENT_CWD=/app/apps/web
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/web ./apps/web
+WORKDIR /app/apps/web
+EXPOSE 3000
+CMD ["sh", "-c", "npx next start -p ${PORT:-3000}"]
