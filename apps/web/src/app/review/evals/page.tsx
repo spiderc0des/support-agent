@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { StatusPill } from "@/components/StatusPill";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +27,11 @@ export default async function Evals({ searchParams }: { searchParams: Promise<{ 
 
   return (
     <>
-      <div className="toolbar">
+      <div className="page-head">
         <h1>Evaluations</h1>
-        <div className="filters">
+      </div>
+      <div>
+        <div className="filters" aria-label="Eval runs">
           {(runs ?? []).map((r) => (
             <Link key={r.id} href={`/review/evals?run=${r.id}`} className={r.id === runId ? "active" : ""}>
               {new Date(r.started_at).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })} · {r.model} · {r.passed ?? "?"}/
@@ -37,7 +40,7 @@ export default async function Evals({ searchParams }: { searchParams: Promise<{ 
           ))}
         </div>
       </div>
-      <table className="table">
+      <table className="table responsive">
         <thead>
           <tr>
             <th>Scenario</th>
@@ -50,23 +53,23 @@ export default async function Evals({ searchParams }: { searchParams: Promise<{ 
         <tbody>
           {(rows ?? []).map((r) => (
             <tr key={r.id}>
-              <td>
+              <td data-label="Scenario">
                 <strong>{r.scenario_id}</strong> {r.scenario_name}
                 {r.repeat_index ? ` #${r.repeat_index + 1}` : ""}
                 {r.conversation_id ? (
                   <div>
-                    <Link href={`/review/${r.conversation_id}`}>conversation</Link>
+                    <Link href={`/review/conversations/${r.conversation_id}`}>View conversation</Link>
                   </div>
                 ) : null}
               </td>
-              <td>{r.expected_behavior}</td>
-              <td className="summary">{r.actual_behavior}</td>
-              <td>
-                <span className={`pill ${r.passed ? "success" : "error"}`}>{r.passed ? "pass" : "fail"}</span>
+              <td data-label="Expected">{r.expected_behavior}</td>
+              <td data-label="Actual" className="summary">{r.actual_behavior}</td>
+              <td data-label="Result">
+                <StatusPill value={r.passed ? "pass" : "fail"} />
               </td>
-              <td>
+              <td data-label="Checks">
                 {((r.checks as CheckResult[]) ?? []).map((c, i) => (
-                  <div key={i} className={c.passed ? "muted" : "error"} title={c.detail}>
+                  <div key={i} className={c.passed ? "check ok" : "check bad"} title={c.detail}>
                     {c.passed ? "✓" : "✗"} {c.check}
                   </div>
                 ))}
@@ -75,7 +78,7 @@ export default async function Evals({ searchParams }: { searchParams: Promise<{ 
           ))}
           {!rows?.length ? (
             <tr>
-              <td colSpan={5}>No evaluations yet. Run npm run eval.</td>
+              <td colSpan={5} className="empty">No evaluations yet. Run npm run eval.</td>
             </tr>
           ) : null}
         </tbody>

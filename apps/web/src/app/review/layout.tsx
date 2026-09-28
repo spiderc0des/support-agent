@@ -1,42 +1,44 @@
-import Link from "next/link";
-import { Logo } from "@/components/Logo";
+import { AppHeader } from "@/components/AppHeader";
+import { currentProfile, displayName } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function ReviewLayout({ children }: { children: React.ReactNode }) {
+/** The support console shell: header, nav with open-work counts, and the role gate. */
+export default async function ConsoleLayout({ children }: { children: React.ReactNode }) {
+  const profile = await currentProfile();
+
+  if (!profile?.role) {
+    return (
+      <div className="page">
+        <main className="main">
+          <section className="card">
+            <h1>No access yet</h1>
+            <p className="lede">
+              {profile ? `${displayName(profile)} (${profile.email}) is signed in` : "You are signed in"}, but the account has no support role. Ask an
+              admin to invite you from the Admin page.
+            </p>
+            <form action="/auth/signout" method="post">
+              <button className="btn secondary" type="submit">
+                Sign out
+              </button>
+            </form>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   const supabase = await supabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: profile } = user
-    ? await supabase.from("profiles").select("role, email").eq("id", user.id).maybeSingle()
-    : { data: null };
+  const [tickets, escalations] = await Promise.all([
+    supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).neq("status", "closed"),
+    supabase.from("escalations").select("escalation_id", { count: "exact", head: true }).neq("status", "closed"),
+  ]);
 
   return (
-    <div className="page">
-      <header className="header">
-        <Logo />
-        <nav className="nav">
-          <Link href="/review">Conversations</Link>
-          <Link href="/review/evals">Evaluations</Link>
-          <form action="/auth/signout" method="post">
-            <button className="linklike" type="submit">
-              Sign out
-            </button>
-          </form>
-        </nav>
-      </header>
-      <main className="wide">
-        {profile?.role === "admin" ? (
-          children
-        ) : (
-          <p className="error">
-            {profile?.email ?? user?.email} does not have reviewer access. Ask an admin to run{" "}
-            <code>npm run seed:admin -- {user?.email ?? "you@company.com"}</code>.
-          </p>
-        )}
-      </main>
+    <div className="page console">
+      <AppHeader profile={{ ...profile, role: profile.role }} openTickets={tickets.count ?? 0} openEscalations={escalations.count ?? 0} />
+      <main className="wide">{children}</main>
     </div>
   );
 }

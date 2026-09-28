@@ -107,12 +107,53 @@ export type RunTurnInput = {
   primer?: string | null;
 };
 
+// One turn at a time per conversation. Vapi can send a second request while
+// the first is still starting (the caller spoke again quickly). Both used to
+// pass the "is it busy?" check before either had begun, and the second then
+// failed with "A turn is already in progress". Now requests queue per call,
+// and a request that a newer one has overtaken is dropped before it spends
+// anything: Vapi discards its reply, and the newer request carries the
+// caller's words since the agent last spoke.
+const gl = globalThis as unknown as { __relaypayTurnQueues?: Map<string, Promise<unknown>>; __relaypayTurnGen?: Map<string, number> };
+const queues = (gl.__relaypayTurnQueues ??= new Map());
+const generation = (gl.__relaypayTurnGen ??= new Map());
+
+const SUPERSEDED: TurnResult = {
+  text: "", tag: null, malformedTag: false, toolsUsed: [], redactions: [], status: "interrupted",
+  errorMessage: "superseded by a newer request", firstTokenMs: null, latencyMs: 0, costUsd: 0,
+  usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+};
+
 export async function runTurn(input: RunTurnInput): Promise<TurnResult & { turnIndex: number; path: AnswerPath }> {
+  const { conversationId, channel } = input;
+  const myGen = (generation.get(conversationId) ?? 0) + 1;
+  generation.set(conversationId, myGen);
+
+  // Barge-in: stop whatever reply is being produced now, without waiting
+  // for the queue, so the older turn ends as fast as possible.
+  const session = sessionFor(conversationId, channel);
+  if (session.isBusy) void session.interrupt();
+
+  const previous = queues.get(conversationId) ?? Promise.resolve();
+  let release!: () => void;
+  const mine = new Promise<void>((r) => (release = r));
+  const tail = previous.then(() => mine);
+  queues.set(conversationId, tail);
+
+  try {
+    await previous.catch(() => {});
+    if (generation.get(conversationId) !== myGen) return { ...SUPERSEDED, turnIndex: -1, path: "answer" };
+    return await runTurnNow(input);
+  } finally {
+    release();
+    if (queues.get(conversationId) === tail) queues.delete(conversationId);
+  }
+}
+
+async function runTurnNow(input: RunTurnInput): Promise<TurnResult & { turnIndex: number; path: AnswerPath }> {
   const { conversationId, channel, userText, onText } = input;
   const session = sessionFor(conversationId, channel);
 
-  // Barge-in: the caller spoke again while the last reply was still being
-  // produced. Stop it; the new utterance is what matters now.
   // interrupt() resolves once the previous turn is settled (by force if need be).
   if (session.isBusy) await session.interrupt();
 
@@ -175,6 +216,7 @@ export async function runTurn(input: RunTurnInput): Promise<TurnResult & { turnI
 export async function endCall(conversationId: string, endedReason: string, opts: { error?: boolean } = {}) {
   const s = sessions.get(conversationId);
   sessions.delete(conversationId);
+  generation.delete(conversationId);
   s?.close();
   const summary = await summariseConversation(conversationId).catch(() => null);
   const closed = await endConversation(conversationId, { endedReason, summary, error: opts.error });

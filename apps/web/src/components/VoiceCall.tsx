@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Vapi from "@vapi-ai/web";
+import { ConfirmButton } from "@/components/ConfirmButton";
 
 type CallState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended" | "error";
 
@@ -129,17 +130,27 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
       <div className="actions">
         {inCall || state === "connecting" ? (
           <>
-            <button className="btn end" onClick={stop}>
-              End call
-            </button>
+            <ConfirmButton
+              label="End call"
+              confirmLabel="End call"
+              question="End the call?"
+              detail="Anything already arranged, such as a ticket or a callback, is kept."
+              tone="danger"
+              onConfirm={stop}
+            />
             <button className="btn secondary" onClick={toggleMute} disabled={!inCall}>
               {muted ? "Unmute" : "Mute"}
             </button>
           </>
         ) : (
-          <button className="btn" onClick={start}>
-            {state === "ended" ? "Start a new call" : "Start call"}
-          </button>
+          <ConfirmButton
+            label={state === "ended" || state === "error" ? "Start a new call" : "Start call"}
+            confirmLabel="Start call"
+            question="Start a voice call with RelayPay support?"
+            detail="Your browser will ask to use your microphone. The conversation is logged so our team can follow up."
+            variant="primary"
+            onConfirm={start}
+          />
         )}
       </div>
 

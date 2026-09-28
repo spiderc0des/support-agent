@@ -7,6 +7,9 @@ export default function Home() {
     <div className="page">
       <header className="header">
         <Logo />
+        <a href="/review" className="header-link">
+          Support team
+        </a>
       </header>
       <main className="main">
         <section className="card">

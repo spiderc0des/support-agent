@@ -53,7 +53,7 @@ Create a project, then:
 npm run db:migrate                # needs SUPABASE_DB_URL and psql; or paste supabase/migrations/*.sql in order
 npm run db:seed                   # customers, transactions, payouts
 npm run kb:ingest                 # knowledge base -> kb_chunks
-npm run seed:admin -- you@company.com   # access to /review
+npm run seed:admin -- you@company.com   # first admin for /review
 ```
 
 For the review sign-in, paste `supabase/email-templates/*.html` into
@@ -101,6 +101,25 @@ the SQL for each evidence row.
 **Model gate:** the agent runs on `claude-haiku-4-5`. If a scenario fails
 repeatedly and prompt fixes don't help, set `AGENT_MODEL=claude-sonnet-5`
 and re-run the eval.
+
+## Support console (`/review`)
+
+Invite-only sign-in (a magic link from `/login`). There are two roles:
+
+| | Support agent | Admin |
+| --- | --- | --- |
+| Overview: open escalations, your tickets, 7-day stats | yes | yes |
+| Tickets and escalations: filter, search, assign, start, close with a resolution note, reopen, add notes, confirm a callback time | yes | yes |
+| Conversations: transcript, tool calls, knowledge used, events | yes | yes |
+| Evaluations | yes | yes |
+| Admin: invite people, change roles, remove access, system and configuration status | no | yes |
+
+Every change to a ticket or escalation asks for confirmation first, and is
+recorded in `case_events`, which the ticket's Activity panel shows. On the
+voice page, starting and ending a call also ask for confirmation.
+
+The first admin is created with `npm run seed:admin -- you@company.com`.
+Everyone after that is invited from Admin.
 
 ## Deploy (Railway)
 

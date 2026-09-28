@@ -86,3 +86,14 @@ export const KYC_STATUSES = ["pending", "approved", "review required"] as const;
 export const TRANSACTION_STATUSES = ["processing", "completed", "delayed", "failed", "review required"] as const;
 export const PAYOUT_STATUSES = ["scheduled", "processing", "completed", "failed", "review required"] as const;
 export const TRANSACTION_TYPES = ["incoming transfer", "outgoing payout", "invoice payment"] as const;
+
+/** Staff roles for the support console. */
+export const STAFF_ROLES = ["support_agent", "admin"] as const;
+export const StaffRole = z.enum(STAFF_ROLES);
+export type StaffRole = z.infer<typeof StaffRole>;
+
+export const ROLE_LABEL: Record<StaffRole, string> = { support_agent: "Support agent", admin: "Admin" };
+
+/** What a person can do to a ticket or escalation; each is one case_events row. */
+export const CASE_ACTIONS = ["status_changed", "assigned", "unassigned", "note_added", "callback_scheduled"] as const;
+export type CaseAction = (typeof CASE_ACTIONS)[number];
