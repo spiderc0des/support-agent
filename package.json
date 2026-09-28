@@ -19,7 +19,12 @@
     "mcp:dev": "npm run dev -w @relaypay/mcp-server",
     "mcp:start": "npm run start -w @relaypay/mcp-server",
     "lint:skills": "tsx scripts/lint-skills.ts",
-    "prompt:size": "tsx scripts/prompt-size.ts"
+    "prompt:size": "tsx scripts/prompt-size.ts",
+    "eval": "tsx scripts/eval.ts",
+    "web:dev": "npm run dev -w @relaypay/web",
+    "web:build": "npm run build -w @relaypay/web",
+    "web:start": "npm run start -w @relaypay/web",
+    "check": "npm run typecheck && npm run lint:skills && npm test"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
