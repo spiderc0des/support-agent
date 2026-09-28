@@ -6,7 +6,16 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true
   },
-  "include": ["spikes/**/*.ts"]
+  "include": [
+    "spikes/**/*.ts",
+    "apps/mcp-server/src/**/*.ts",
+    "packages/shared/src/**/*.ts",
+    "scripts/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }

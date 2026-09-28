@@ -1,0 +1,17 @@
+{
+  "name": "@relaypay/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./enums": "./src/enums.ts",
+    "./supabase": "./src/supabase.ts",
+    "./kb": "./src/kb.ts",
+    "./csv": "./src/csv.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "zod": "^4.6.5"
+  }
+}
