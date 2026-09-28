@@ -9,13 +9,15 @@
  * from the X-Conversation-Id header the orchestrator sets for each call, so
  * the model can never write into a conversation it was not given.
  */
-import "dotenv/config";
+import { loadEnv } from "@relaypay/shared/env";
 import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { supabaseAdmin } from "@relaypay/shared/supabase";
 import { buildServer } from "./server.ts";
 import { SupabaseStore } from "./store.ts";
+
+loadEnv();
 
 const PORT = Number(process.env.PORT ?? process.env.MCP_PORT ?? 8788);
 const TOKEN = process.env.MCP_AUTH_TOKEN;

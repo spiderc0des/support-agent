@@ -8,10 +8,12 @@
     "./enums": "./src/enums.ts",
     "./supabase": "./src/supabase.ts",
     "./kb": "./src/kb.ts",
-    "./csv": "./src/csv.ts"
+    "./csv": "./src/csv.ts",
+    "./env": "./src/env.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "dotenv": "^18.0.4"
   }
 }

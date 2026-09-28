@@ -12,7 +12,14 @@
     "spike:vapi": "tsx spikes/vapi-echo.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:retrieval": "tsx --test tests/retrieval.test.ts",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "db:migrate": "tsx scripts/db-migrate.ts",
+    "db:seed": "tsx scripts/db-seed.ts",
+    "kb:ingest": "tsx scripts/kb-ingest.ts",
+    "mcp:dev": "npm run dev -w @relaypay/mcp-server",
+    "mcp:start": "npm run start -w @relaypay/mcp-server",
+    "lint:skills": "tsx scripts/lint-skills.ts",
+    "prompt:size": "tsx scripts/prompt-size.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
