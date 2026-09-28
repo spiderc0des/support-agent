@@ -1,0 +1,109 @@
+/*
+ * RelayPay brand direction: professional, calm, minimal, trustworthy.
+ * Deep blue primary, teal-blue accent, off-white background, one sans-serif
+ * family with two weights. No gradients, no bright colours, no emojis.
+ */
+:root {
+  --brand: #17365d;          /* deep blue */
+  --brand-hover: #122b4a;
+  --accent: #1f6f80;         /* teal blue */
+  --accent-soft: #e6f0f2;
+  --bg: #f5f6f8;             /* off-white */
+  --surface: #ffffff;
+  --text: #1b2430;
+  --muted: #5b6675;
+  --border: #dde2e8;
+  --danger: #9b2c2c;
+  --radius: 10px;
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); }
+
+button { font: inherit; }
+
+.page { min-height: 100vh; display: flex; flex-direction: column; }
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.logo { display: flex; align-items: center; gap: 10px; color: var(--brand); font-weight: 600; font-size: 18px; text-decoration: none; }
+
+.main { flex: 1; display: flex; justify-content: center; padding: 48px 16px; }
+
+.card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+}
+
+.card h1 { margin: 0 0 8px; font-size: 24px; font-weight: 600; color: var(--brand); }
+.lede { margin: 0 0 28px; color: var(--muted); }
+
+.status { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-weight: 600; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex: none; }
+.dot[data-state="listening"] { background: var(--accent); }
+.dot[data-state="speaking"],
+.dot[data-state="thinking"] { background: var(--brand); }
+.dot[data-state="error"] { background: var(--danger); }
+
+.level { height: 4px; background: var(--accent-soft); border-radius: 2px; overflow: hidden; margin-bottom: 24px; }
+.level > span { display: block; height: 100%; background: var(--accent); transition: width 80ms linear; }
+
+.actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+
+.btn {
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+  padding: 12px 22px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.btn:hover { background: var(--brand-hover); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.btn.secondary { background: var(--surface); color: var(--brand); }
+.btn.secondary:hover { background: var(--bg); }
+.btn.end { background: var(--surface); color: var(--danger); border-color: var(--danger); }
+
+.captions { border-top: 1px solid var(--border); padding-top: 20px; margin-bottom: 24px; min-height: 72px; }
+.caption { margin: 0 0 8px; color: var(--text); }
+.caption .who { display: inline-block; min-width: 76px; color: var(--muted); font-weight: 600; }
+
+.help { margin: 0; padding: 20px; background: var(--bg); border-radius: var(--radius); }
+.help h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+.help ul { margin: 0; padding-left: 18px; color: var(--muted); }
+.help li { margin: 2px 0; }
+
+.note { margin: 20px 0 0; font-size: 14px; color: var(--muted); }
+.error { margin: 0 0 20px; color: var(--danger); }
+
+.footer { padding: 16px 24px; font-size: 13px; color: var(--muted); text-align: center; }
+
+@media (max-width: 480px) {
+  .card { padding: 24px 16px; }
+  .main { padding: 24px 12px; }
+  .btn { flex: 1; }
+}

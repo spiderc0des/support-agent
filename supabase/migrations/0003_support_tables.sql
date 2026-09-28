@@ -334,9 +334,26 @@ begin
 end;
 $$;
 
+-- The orchestrator calls this before each user turn. Atomic, so a barge-in
+-- that overlaps the previous turn can never reuse its index.
+create or replace function public.begin_turn(p_conversation_id uuid)
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  update public.conversations
+     set current_turn = current_turn + 1,
+         num_turns = current_turn + 1
+   where id = p_conversation_id
+  returning current_turn;
+$$;
+
 -- Service role only. The anon and authenticated roles must never be able to
 -- file tickets or escalations directly through PostgREST.
 revoke all on function public.create_support_ticket(uuid, text, text, text, text, text, text, integer) from public, anon, authenticated;
 revoke all on function public.create_escalation(uuid, text, text, text, text, text, text, text, text, text, text, integer) from public, anon, authenticated;
 grant execute on function public.create_support_ticket(uuid, text, text, text, text, text, text, integer) to service_role;
 grant execute on function public.create_escalation(uuid, text, text, text, text, text, text, text, text, text, text, integer) to service_role;
+revoke all on function public.begin_turn(uuid) from public, anon, authenticated;
+grant execute on function public.begin_turn(uuid) to service_role;

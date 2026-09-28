@@ -34,10 +34,22 @@ export type SkillName = (typeof REQUIRED_SKILLS)[number];
 
 export type LoadedSkill = { name: SkillName; description: string; body: string; file: string };
 
-/** Where .claude/skills lives. Set AGENT_CWD in a container; defaults to the web app. */
+/**
+ * Where .claude/skills lives. AGENT_CWD wins (set it in the container);
+ * otherwise the first of: the working directory (next dev / next start run
+ * in apps/web), apps/web under it (scripts run from the repo root), or this
+ * file's app. import.meta.dirname alone is not enough: Next bundles server
+ * code, and the bundle does not sit next to the skills.
+ */
 export function skillsDir(): string {
-  const base = process.env.AGENT_CWD ?? path.resolve(import.meta.dirname, "../..");
-  return path.join(base, ".claude", "skills");
+  const candidates = [
+    process.env.AGENT_CWD,
+    process.cwd(),
+    path.join(process.cwd(), "apps", "web"),
+    import.meta.dirname ? path.resolve(import.meta.dirname, "../..") : undefined,
+  ].filter((c): c is string => Boolean(c));
+  const found = candidates.find((c) => fs.existsSync(path.join(c, ".claude", "skills")));
+  return path.join(found ?? candidates[0], ".claude", "skills");
 }
 
 function parseSkill(name: SkillName, file: string): LoadedSkill {
