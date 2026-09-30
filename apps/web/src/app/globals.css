@@ -103,13 +103,14 @@ textarea.field { resize: vertical; }
 .dot[data-state="error"] { background: var(--danger); }
 .level { height: 4px; background: var(--accent-soft); border-radius: 2px; overflow: hidden; margin-bottom: 24px; }
 .level > span { display: block; height: 100%; background: var(--accent); transition: width 80ms linear; }
-.actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
-.captions { border-top: 1px solid var(--border); padding-top: 20px; margin-bottom: 24px; min-height: 72px; }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+.captions { border-top: 1px solid var(--border); padding-top: 20px; min-height: 72px; }
 .caption { margin: 0 0 8px; }
 .caption { display: flex; gap: 8px; }
 .caption .who { flex: none; min-width: 76px; color: var(--muted); font-weight: 600; }
 .caption-partial { color: var(--muted); }
-.help { margin: 0; padding: 20px; background: var(--bg); border-radius: var(--radius); }
+.help { margin: 0 0 24px; padding: 16px 20px; background: var(--bg); border-radius: var(--radius); }
+.help .note { margin: 12px 0 0; }
 .help h2 { margin: 0 0 8px; font-size: 15px; }
 .help ul { margin: 0; padding-left: 18px; color: var(--muted); }
 .note { margin: 20px 0 0; font-size: 14px; color: var(--muted); }

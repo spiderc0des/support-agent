@@ -19,11 +19,8 @@ export default function Home() {
             with a specialist when you need one.
           </p>
 
-          <VoiceCall
-            publicKey={process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? ""}
-            assistantId={process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID ?? ""}
-          />
-
+          {/* Guidance sits above the call so the captions, which grow as
+              people talk, are the last thing on the card and push nothing. */}
           <div className="help">
             <h2>It can help with</h2>
             <ul>
@@ -32,17 +29,21 @@ export default function Home() {
               <li>Invoicing and account questions</li>
               <li>Opening a support ticket or arranging a callback from a specialist</li>
             </ul>
+            <p className="note">
+              Never share passwords, one-time codes, or card numbers on a call.
+              {phone ? (
+                <>
+                  {" "}
+                  Prefer the phone? Call <a href={`tel:${phone.replace(/\s/g, "")}`}>{phone}</a>.
+                </>
+              ) : null}
+            </p>
           </div>
 
-          <p className="note">
-            Never share passwords, one-time codes, or card numbers on a call.
-            {phone ? (
-              <>
-                {" "}
-                Prefer the phone? Call <a href={`tel:${phone.replace(/\s/g, "")}`}>{phone}</a>.
-              </>
-            ) : null}
-          </p>
+          <VoiceCall
+            publicKey={process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? ""}
+            assistantId={process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID ?? ""}
+          />
         </section>
       </main>
       <footer className="footer">Calls are recorded in our support logs so the team can follow up.</footer>

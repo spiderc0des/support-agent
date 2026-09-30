@@ -15,6 +15,7 @@ import Vapi from "@vapi-ai/web";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { captionsReducer, fromVapiMessage, initialCaptions, type CaptionLine } from "@/lib/captions";
 import { startRingback, type Ringback } from "@/lib/ringback";
+import { END_CALL_PHRASE } from "@/agent/closing";
 
 type CallState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended" | "error";
 
@@ -30,6 +31,17 @@ const LABEL: Record<CallState, string> = {
 
 /** After the call connects, the greeting normally starts within a second; stop ringing regardless after this. */
 const RING_AFTER_CONNECT_MS = 4000;
+
+/**
+ * When the agent says the end-call phrase, Vapi hangs up on its side
+ * (endedReason assistant-said-end-call-phrase), but the Web SDK does not
+ * always tell the page. So once the goodbye has finished playing, the page
+ * closes the call itself. The longer wait covers a goodbye whose playback
+ * end is never reported.
+ */
+const CLOSE_AFTER_GOODBYE_MS = 1500;
+const CLOSE_GOODBYE_FALLBACK_MS = 10_000;
+const PHRASE = END_CALL_PHRASE.toLowerCase().replace(/\.$/, "");
 
 type ResetAction = { reset: true };
 
@@ -57,39 +69,66 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
     const vapi = new Vapi(publicKey);
     vapiRef.current = vapi;
     let ringTimer: ReturnType<typeof setTimeout> | undefined;
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+    let saidGoodbye = false;
+    let ended = false;
+    let speaking = false;
 
-    vapi.on("call-start", () => {
-      setState("listening");
-      ringTimer = setTimeout(stopRing, RING_AFTER_CONNECT_MS);
-    });
-    vapi.on("call-end", () => {
+    // Idempotent: Vapi's own call-end, a status message, or our backstop may all arrive.
+    const finish = () => {
+      if (ended) return;
+      ended = true;
+      clearTimeout(closeTimer);
+      clearTimeout(fallbackTimer);
       stopRing();
       setState((s) => (s === "error" ? s : "ended"));
       setLevel(0);
       setMuted(false);
+      void vapi.stop();
+    };
+    const closeSoon = (ms: number) => {
+      clearTimeout(closeTimer);
+      closeTimer = setTimeout(finish, ms);
+    };
+
+    vapi.on("call-start", () => {
+      ended = false;
+      saidGoodbye = false;
+      setState("listening");
+      ringTimer = setTimeout(stopRing, RING_AFTER_CONNECT_MS);
     });
+    vapi.on("call-end", finish);
     vapi.on("speech-start", () => {
+      speaking = true;
       stopRing();
       setState("speaking");
     });
-    vapi.on("speech-end", () => setState("listening"));
+    vapi.on("speech-end", () => {
+      speaking = false;
+      if (saidGoodbye) closeSoon(CLOSE_AFTER_GOODBYE_MS);
+      else setState("listening");
+    });
     vapi.on("volume-level", (v: number) => setLevel(v));
-    vapi.on("message", (m: Parameters<typeof fromVapiMessage>[0]) => {
+    vapi.on("message", (m: Parameters<typeof fromVapiMessage>[0] & { status?: string }) => {
+      if (m.type === "status-update" && m.status === "ended") return finish();
       const ev = fromVapiMessage(m);
       if (!ev) return;
       dispatch(ev);
       if (ev.role === "user" && ev.final) setState("thinking");
+      if (ev.role === "agent" && ev.final && ev.text.toLowerCase().includes(PHRASE) && !saidGoodbye) {
+        saidGoodbye = true;
+        fallbackTimer = setTimeout(finish, CLOSE_GOODBYE_FALLBACK_MS);
+        // Transcript can land after the goodbye has already finished playing.
+        if (!speaking) closeSoon(CLOSE_AFTER_GOODBYE_MS);
+      }
     });
     vapi.on("error", (e: unknown) => {
       stopRing();
       // When Vapi hangs up (after the agent's goodbye, or a long silence),
       // the calling layer reports it as an "ejection" error. That is a
       // normal end of call, not a failure.
-      if (isNormalHangUp(e)) {
-        setState("ended");
-        setLevel(0);
-        return;
-      }
+      if (isNormalHangUp(e)) return finish();
       console.error("[vapi]", e);
       setError("The call could not continue. Please try again.");
       setState("error");
@@ -97,6 +136,8 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
 
     return () => {
       clearTimeout(ringTimer);
+      clearTimeout(closeTimer);
+      clearTimeout(fallbackTimer);
       stopRing();
       void vapi.stop();
       vapi.removeAllListeners();
