@@ -20,7 +20,7 @@ import { END_CALL_PHRASE } from "@/agent/closing";
 type CallState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended" | "error";
 
 const LABEL: Record<CallState, string> = {
-  idle: "Ready when you are",
+  idle: "Support is available. Start a call to begin.",
   connecting: "Calling RelayPay support…",
   listening: "Listening",
   thinking: "Thinking",
