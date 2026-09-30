@@ -41,15 +41,34 @@ export type VapiServerMessage = {
  * Both are accepted and compared in constant time.
  */
 export function vapiAuthorised(headers: Headers): boolean {
-  const secret = process.env.VAPI_WEBHOOK_SECRET;
-  if (!secret) return false;
+  // Tolerate the usual copy-paste damage in a hosting dashboard: surrounding
+  // whitespace or quotes around the value.
+  const secret = process.env.VAPI_WEBHOOK_SECRET?.trim().replace(/^["']|["']$/g, "");
+  const candidates = [headers.get("x-vapi-secret"), headers.get("authorization")?.replace(/^Bearer\s+/i, "")].map((c) => c?.trim() ?? "");
+  if (!secret) {
+    warnOnce("VAPI_WEBHOOK_SECRET is not set, so every Vapi request is refused (Vapi reports pipeline-error-custom-llm-401-unauthorized).");
+    return false;
+  }
   const expected = Buffer.from(secret);
-  const candidates = [headers.get("x-vapi-secret"), headers.get("authorization")?.replace(/^Bearer\s+/i, "")];
-  return candidates.some((c) => {
+  const ok = candidates.some((c) => {
     if (!c) return false;
     const given = Buffer.from(c);
     return given.length === expected.length && timingSafeEqual(given, expected);
   });
+  if (!ok) {
+    // Lengths only: enough to spot a wrong or truncated value, nothing that reveals it.
+    warnOnce(
+      `Vapi secret mismatch: request carried ${candidates.filter(Boolean).map((c) => `${c.length} chars`).join(" / ") || "no secret"}, ` +
+        `VAPI_WEBHOOK_SECRET is ${secret.length} chars. It must equal the key of Vapi's custom-llm credential.`,
+    );
+  }
+  return ok;
+}
+
+let warned = 0;
+function warnOnce(message: string) {
+  // At most a few lines, so a misconfigured deploy doesn't flood the logs.
+  if (warned++ < 3) console.warn(`[vapi] ${message}`);
 }
 
 export function channelOf(call: VapiCall | undefined): Channel {
