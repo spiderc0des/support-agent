@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@anthropic-ai/claude-agent-sdk"],
   /** The shared workspace package ships TypeScript source. */
   transpilePackages: ["@relaypay/shared"],
+  experimental: {
+    /**
+     * No persistent Turbopack cache for production builds. Hosted builders
+     * (Railway's included) carry .next/cache between builds, and a cache file
+     * truncated by an interrupted build failed every later build with
+     * "block … header truncated in …sst". The app builds in seconds without it.
+     */
+    turbopackFileSystemCacheForBuild: false,
+  },
 };
 
 export default nextConfig;
