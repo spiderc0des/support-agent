@@ -106,7 +106,9 @@ textarea.field { resize: vertical; }
 .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
 .captions { border-top: 1px solid var(--border); padding-top: 20px; margin-bottom: 24px; min-height: 72px; }
 .caption { margin: 0 0 8px; }
-.caption .who { display: inline-block; min-width: 76px; color: var(--muted); font-weight: 600; }
+.caption { display: flex; gap: 8px; }
+.caption .who { flex: none; min-width: 76px; color: var(--muted); font-weight: 600; }
+.caption-partial { color: var(--muted); }
 .help { margin: 0; padding: 20px; background: var(--bg); border-radius: var(--radius); }
 .help h2 { margin: 0 0 8px; font-size: 15px; }
 .help ul { margin: 0; padding-left: 18px; color: var(--muted); }

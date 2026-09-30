@@ -11,7 +11,17 @@
     "provider": "deepgram",
     "model": "nova-3",
     "language": "en",
-    "keyterm": ["RelayPay", "LagosLedger", "NairobiOps", "AccraStack", "CapeCloud", "KigaliWorks", "TXN", "payout", "KYC"]
+    "keyterm": [
+      "RelayPay",
+      "LagosLedger",
+      "NairobiOps",
+      "AccraStack",
+      "CapeCloud",
+      "KigaliWorks",
+      "TXN",
+      "payout",
+      "KYC"
+    ]
   },
   "voice": {
     "provider": "vapi",
@@ -19,11 +29,19 @@
   },
   "server": {
     "url": "${APP_URL}/api/vapi/events",
-    "headers": { "x-vapi-secret": "${VAPI_WEBHOOK_SECRET}" }
+    "headers": {
+      "x-vapi-secret": "${VAPI_WEBHOOK_SECRET}"
+    }
   },
-  "serverMessages": ["status-update", "end-of-call-report", "user-interrupted"],
+  "serverMessages": [
+    "status-update",
+    "end-of-call-report",
+    "user-interrupted"
+  ],
   "silenceTimeoutSeconds": 30,
   "maxDurationSeconds": 900,
-  "endCallMessage": "Thanks for calling RelayPay. Goodbye.",
-  "backgroundSound": "off"
+  "backgroundSound": "off",
+  "endCallPhrases": [
+    "goodbye from relaypay"
+  ]
 }

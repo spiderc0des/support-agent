@@ -73,3 +73,10 @@ test("S8's decline check accepts the common ways of saying it", () => {
     assert.ok(r.passed, `should accept: ${reply}`);
   }
 });
+
+test("the Vapi end-call phrase is the one the voice-style skill tells the agent to say", () => {
+  const assistant = JSON.parse(fs.readFileSync(path.join(ROOT, "vapi/assistant.template.json"), "utf8"));
+  const skill = fs.readFileSync(path.join(ROOT, "apps/web/.claude/skills/voice-style/SKILL.md"), "utf8").toLowerCase();
+  assert.ok(assistant.endCallPhrases?.length, "assistant has endCallPhrases");
+  for (const phrase of assistant.endCallPhrases as string[]) assert.ok(skill.includes(phrase.toLowerCase()), `skill never says "${phrase}"`);
+});

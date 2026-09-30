@@ -2,21 +2,25 @@
 
 /**
  * The web voice call. Vapi's Web SDK owns the microphone, speech-to-text and
- * speech output; this component only starts and stops the call and shows
- * where it stands.
+ * speech output; this component starts and stops the call and shows where it
+ * stands.
  *
- * Deliberately not a chat window (brand direction): one status line, a
- * level bar, and the latest line from each side as captions.
+ * Deliberately not a chat window (brand direction): a status line, a level
+ * bar, and one caption per speaker. Each caption holds that speaker's whole
+ * current turn (see lib/captions.ts). A soft ring plays while the call
+ * connects and stops when the agent starts speaking.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import Vapi from "@vapi-ai/web";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import { captionsReducer, fromVapiMessage, initialCaptions, type CaptionLine } from "@/lib/captions";
+import { startRingback, type Ringback } from "@/lib/ringback";
 
 type CallState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended" | "error";
 
 const LABEL: Record<CallState, string> = {
   idle: "Ready when you are",
-  connecting: "Connecting…",
+  connecting: "Calling RelayPay support…",
   listening: "Listening",
   thinking: "Thinking",
   speaking: "Speaking",
@@ -24,65 +28,88 @@ const LABEL: Record<CallState, string> = {
   error: "Something went wrong",
 };
 
-type TranscriptMessage = { type?: string; role?: string; transcriptType?: string; transcript?: string };
+/** After the call connects, the greeting normally starts within a second; stop ringing regardless after this. */
+const RING_AFTER_CONNECT_MS = 4000;
+
+type ResetAction = { reset: true };
 
 export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assistantId: string }) {
   const vapiRef = useRef<Vapi | null>(null);
+  const ringRef = useRef<Ringback | null>(null);
   const [state, setState] = useState<CallState>("idle");
   const [muted, setMuted] = useState(false);
   const [level, setLevel] = useState(0);
-  const [you, setYou] = useState("");
-  const [agent, setAgent] = useState("");
+  const [captions, dispatch] = useReducer(
+    (s: typeof initialCaptions, a: Parameters<typeof captionsReducer>[1] | ResetAction) => ("reset" in a ? initialCaptions : captionsReducer(s, a)),
+    initialCaptions,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const configured = Boolean(publicKey && assistantId);
+
+  const stopRing = useCallback(() => {
+    ringRef.current?.stop();
+    ringRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!configured) return;
     const vapi = new Vapi(publicKey);
     vapiRef.current = vapi;
+    let ringTimer: ReturnType<typeof setTimeout> | undefined;
 
-    vapi.on("call-start", () => setState("listening"));
+    vapi.on("call-start", () => {
+      setState("listening");
+      ringTimer = setTimeout(stopRing, RING_AFTER_CONNECT_MS);
+    });
     vapi.on("call-end", () => {
-      setState("ended");
+      stopRing();
+      setState((s) => (s === "error" ? s : "ended"));
       setLevel(0);
       setMuted(false);
     });
-    vapi.on("speech-start", () => setState("speaking"));
+    vapi.on("speech-start", () => {
+      stopRing();
+      setState("speaking");
+    });
     vapi.on("speech-end", () => setState("listening"));
     vapi.on("volume-level", (v: number) => setLevel(v));
-    vapi.on("message", (m: TranscriptMessage) => {
-      if (m.type !== "transcript" || !m.transcript) return;
-      if (m.role === "user") {
-        setYou(m.transcript);
-        if (m.transcriptType === "final") setState("thinking");
-      } else if (m.role === "assistant" && m.transcriptType === "final") {
-        setAgent(m.transcript);
-      }
+    vapi.on("message", (m: Parameters<typeof fromVapiMessage>[0]) => {
+      const ev = fromVapiMessage(m);
+      if (!ev) return;
+      dispatch(ev);
+      if (ev.role === "user" && ev.final) setState("thinking");
     });
     vapi.on("error", (e: unknown) => {
       console.error("[vapi]", e);
+      stopRing();
       setError("The call could not continue. Please try again.");
       setState("error");
     });
 
     return () => {
+      clearTimeout(ringTimer);
+      stopRing();
       void vapi.stop();
       vapi.removeAllListeners();
       vapiRef.current = null;
     };
-  }, [configured, publicKey]);
+  }, [configured, publicKey, stopRing]);
 
   const start = useCallback(async () => {
     const vapi = vapiRef.current;
     if (!vapi) return;
     setError(null);
-    setYou("");
-    setAgent("");
+    dispatch({ reset: true });
     setState("connecting");
+    // Started inside the click that confirmed the call: browsers only let
+    // audio begin from a user gesture.
+    stopRing();
+    ringRef.current = startRingback();
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
+      stopRing();
       setError("Microphone access is blocked. Allow it in your browser settings to talk to support.");
       setState("error");
       return;
@@ -91,14 +118,16 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
       await vapi.start(assistantId);
     } catch (e) {
       console.error("[vapi] start failed", e);
+      stopRing();
       setError("We couldn't start the call. Please try again in a moment.");
       setState("error");
     }
-  }, [assistantId]);
+  }, [assistantId, stopRing]);
 
   const stop = useCallback(() => {
+    stopRing();
     void vapiRef.current?.stop();
-  }, []);
+  }, [stopRing]);
 
   const toggleMute = useCallback(() => {
     const vapi = vapiRef.current;
@@ -154,20 +183,26 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
         )}
       </div>
 
-      <div className="captions" aria-live="polite">
-        {you ? (
-          <p className="caption">
-            <span className="who">You</span>
-            {you}
-          </p>
-        ) : null}
-        {agent ? (
-          <p className="caption">
-            <span className="who">RelayPay</span>
-            {agent}
-          </p>
-        ) : null}
+      <div className="captions">
+        <Caption who="You" line={captions.user} />
+        {/* Only the agent's line is announced to screen readers; the caller knows what they said. */}
+        <div aria-live="polite">
+          <Caption who="RelayPay" line={captions.agent} />
+        </div>
       </div>
     </div>
+  );
+}
+
+function Caption({ who, line }: { who: string; line: CaptionLine }) {
+  if (!line.finals && !line.partial) return null;
+  return (
+    <p className="caption">
+      <span className="who">{who}</span>
+      <span>
+        {line.finals}
+        {line.partial ? <span className="caption-partial">{line.finals ? " " : ""}{line.partial}</span> : null}
+      </span>
+    </p>
   );
 }
