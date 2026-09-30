@@ -95,7 +95,8 @@ textarea.field { resize: vertical; }
 .main { flex: 1; display: flex; justify-content: center; padding: 48px 16px; }
 .card { width: 100%; max-width: 560px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; }
 .card h1 { margin: 0 0 8px; font-size: 24px; color: var(--brand); }
-.lede { margin: 0 0 28px; color: var(--muted); }
+.lede { margin: 0 0 12px; color: var(--muted); }
+.note.privacy { margin: 0 0 24px; }
 .status { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-weight: 600; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex: none; }
 .dot[data-state="listening"] { background: var(--accent); }
@@ -109,10 +110,6 @@ textarea.field { resize: vertical; }
 .caption { display: flex; gap: 8px; }
 .caption .who { flex: none; min-width: 76px; color: var(--muted); font-weight: 600; }
 .caption-partial { color: var(--muted); }
-.help { margin: 0 0 24px; padding: 16px 20px; background: var(--bg); border-radius: var(--radius); }
-.help .note { margin: 12px 0 0; }
-.help h2 { margin: 0 0 8px; font-size: 15px; }
-.help ul { margin: 0; padding-left: 18px; color: var(--muted); }
 .note { margin: 20px 0 0; font-size: 14px; color: var(--muted); }
 .footer { padding: 16px 24px; font-size: 13px; color: var(--muted); text-align: center; }
 
