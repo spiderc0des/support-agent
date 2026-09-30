@@ -101,7 +101,8 @@ The skills below are your operating rules. Each rule has an ID such as R-ROUTE-1
 let cached: string | null = null;
 
 export function buildSystemPrompt(): string {
-  if (cached) return cached;
+  // Cached in production only: in development, a skill edit applies to the next call without a restart.
+  if (cached && process.env.NODE_ENV === "production") return cached;
   const skills = loadSkills();
   cached = [
     PREAMBLE,

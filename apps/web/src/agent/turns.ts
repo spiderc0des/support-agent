@@ -8,6 +8,7 @@
  */
 import type { AnswerPath, Channel } from "@relaypay/shared/enums";
 import { emailsSpokenBy } from "./speech-filter.ts";
+import { endCallSuffix } from "./closing.ts";
 import { SupportSession, type TurnResult } from "./support-session.ts";
 import {
   beginTurn,
@@ -185,11 +186,20 @@ async function runTurnNow(input: RunTurnInput): Promise<TurnResult & { turnIndex
     }, turnIndex);
   }
 
+  // The caller is done: make sure the reply ends with the exact phrase Vapi
+  // hangs up on, whatever wording the agent chose (see closing.ts).
+  const endSuffix = result.status === "ok" ? endCallSuffix({ tagEnd: result.tag?.end, userText, replyText: result.text }) : "";
+  if (endSuffix) {
+    onText(endSuffix);
+    result = { ...result, text: `${result.text}${endSuffix}` };
+  }
+
   const path = result.tag?.path ?? inferPath(result);
   const notes = [
     result.tag?.note,
     !result.tag ? (result.malformedTag ? "control tag malformed; path inferred" : "control tag missing; path inferred") : null,
     result.redactions.length ? `redacted: ${[...new Set(result.redactions)].join(", ")}` : null,
+    endSuffix ? "end-call phrase appended by the server" : null,
   ].filter(Boolean);
 
   await recordTurn({

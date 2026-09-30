@@ -81,8 +81,16 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
       if (ev.role === "user" && ev.final) setState("thinking");
     });
     vapi.on("error", (e: unknown) => {
-      console.error("[vapi]", e);
       stopRing();
+      // When Vapi hangs up (after the agent's goodbye, or a long silence),
+      // the calling layer reports it as an "ejection" error. That is a
+      // normal end of call, not a failure.
+      if (isNormalHangUp(e)) {
+        setState("ended");
+        setLevel(0);
+        return;
+      }
+      console.error("[vapi]", e);
       setError("The call could not continue. Please try again.");
       setState("error");
     });
@@ -205,4 +213,10 @@ function Caption({ who, line }: { who: string; line: CaptionLine }) {
       </span>
     </p>
   );
+}
+
+/** Vapi's "call is over" signals, which arrive through the error channel. */
+export function isNormalHangUp(e: unknown): boolean {
+  const text = JSON.stringify(e ?? "").toLowerCase();
+  return text.includes("meeting has ended") || text.includes("ejection");
 }

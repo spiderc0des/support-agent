@@ -54,6 +54,7 @@ End every reply with exactly one control tag, after the spoken text:
 - `conf` is one of <!-- enum:CONFIDENCE_LEVELS --> `high`, `medium`, `low`.
 - A reply that confirms a ticket is `answer`. A reply that collects details for an escalation, or confirms one, is `escalate`.
 - Use `conf=low` whenever you relied on partial context; say why in `note` (at most 12 words, for a reviewer).
+- Add `|end=yes` only to the reply that closes the call (R-VOICE-8), for example `[[path=answer|conf=high|note=caller finished|end=yes]]`.
 - The tag is removed before the caller hears anything. Never mention it or explain it.
 
 ### R-ROUTE-6 · The test scenarios

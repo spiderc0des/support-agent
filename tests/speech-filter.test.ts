@@ -18,7 +18,7 @@ function run(chunks: string[], emails: string[] = []) {
 test("the tag is stripped and parsed", () => {
   const { out, f } = run(["Fees vary by corridor. ", "[[path=answer|conf=high|note=fee policy]]"]);
   assert.equal(out.trim(), "Fees vary by corridor.");
-  assert.deepEqual(f.tag, { path: "answer", confidence: "high", note: "fee policy" });
+  assert.deepEqual(f.tag, { path: "answer", confidence: "high", note: "fee policy", end: false });
 });
 
 test("a tag split across every possible chunk boundary never leaks", () => {

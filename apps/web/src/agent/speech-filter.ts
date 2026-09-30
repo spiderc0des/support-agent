@@ -14,7 +14,7 @@
  */
 import { ANSWER_PATHS, CONFIDENCE_LEVELS, type AnswerPath, type Confidence } from "@relaypay/shared/enums";
 
-export type ControlTag = { path: AnswerPath; confidence: Confidence; note: string | null };
+export type ControlTag = { path: AnswerPath; confidence: Confidence; note: string | null; end: boolean };
 
 const TAG_RE = /\[\[\s*([^\]]*?)\s*\]\]/g;
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
@@ -33,6 +33,7 @@ export function parseControlTag(inner: string): ControlTag | null {
     path,
     confidence: (CONFIDENCE_LEVELS as readonly string[]).includes(confidence) ? confidence : "medium",
     note: fields.note ? fields.note.slice(0, 160) : null,
+    end: /^(yes|true|1)$/i.test(fields.end ?? ""),
   };
 }
 
