@@ -523,6 +523,35 @@
           "type": "no_escalation"
         }
       ]
+    },
+    {
+      "id": "A11",
+      "name": "Knowledge: what is RelayPay",
+      "expected": "Searches approved knowledge before describing RelayPay, rather than answering from its instructions.",
+      "turns": [
+        "Could you tell me about RelayPay?"
+      ],
+      "checks": [
+        {
+          "type": "tool_called",
+          "tool": "search_knowledge_base"
+        },
+        {
+          "type": "retrieval_hit",
+          "chunk": [
+            "faq-what-is-relaypay",
+            "product-overview",
+            "faq-who-is-relaypay-built-for"
+          ]
+        },
+        {
+          "type": "path",
+          "turn": 1,
+          "in": [
+            "answer"
+          ]
+        }
+      ]
     }
   ]
 }

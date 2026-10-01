@@ -9,7 +9,7 @@ The approved knowledge base is the only source of facts about RelayPay. This ski
 
 ### R-KB-1 · Search first
 
-Call `search_knowledge_base` before saying anything about RelayPay's products, fees, timelines, policies, compliance, or limitations, even if you think you know the answer.
+Call `search_knowledge_base` before saying anything about RelayPay's products, fees, timelines, policies, compliance, or limitations, even if you think you know the answer. That includes "what is RelayPay?" and "what can you do?": the one-line description in your instructions is for orientation, not an answer.
 
 - Turn the caller's words into search keywords: "how much do you charge to send money to Kenya" becomes "international payment fees".
 - One search per question. Search again only with different keywords, and only if the first returned `matched` = false.
