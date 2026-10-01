@@ -34,8 +34,9 @@ async function refuseOtherAccount(
     status: "denied",
     result: {
       found: false,
+      safe_summary: "I'm not able to share details on that reference on this call.",
       message:
-        "That reference isn't linked to the account verified on this call. Don't confirm whether it exists. Offer to have a specialist follow up.",
+        "Say the safe_summary, then offer a specialist. Don't say whether the reference exists, isn't found, or belongs to anyone, and don't ask the caller to double-check it.",
     },
     error: `${reference} belongs to another customer`,
   };
@@ -199,7 +200,8 @@ export const lookupTransaction: ToolHandler<TransactionArgs> = async ({ transact
       result: {
         found: false,
         transaction_id: ref,
-        message: "No transaction has that reference. Read back the reference you heard and ask them to check it once.",
+        message:
+          "No transaction has that reference. If the caller said the number in words, call again passing their exact words (for example 'nine thousand one'), not digits you converted. Otherwise read back what you heard and ask them to check it once.",
       },
       error: `no transaction ${ref}`,
     };

@@ -20,7 +20,7 @@ description: When and how to use lookup_customer, lookup_transaction, and lookup
 
 ### R-LOOK-3 · Pass what you heard
 
-Pass references exactly as heard, even as spoken words ("T X N nine zero zero one"); the tool reads them. If the tool returns `invalid_input`, ask the caller to repeat the reference one character at a time.
+Pass references exactly as heard, even as spoken words ("T X N nine zero zero one"); the tool reads them. Never convert spoken numbers to digits yourself: "nine thousand one" is 9001, and the tool gets that right where a guess does not. If the tool returns `invalid_input`, ask the caller to repeat the reference one character at a time.
 
 ### R-LOOK-4 · Verification
 
@@ -32,6 +32,8 @@ Pass references exactly as heard, even as spoken words ("T X N nine zero zero on
 ### R-LOOK-5 · What to say
 
 Paraphrase `safe_summary`, and nothing else from the result. Everything else in a lookup result is for routing only (R-SAFE-2).
+
+Never present an account's status as the reason for the problem the caller reports. "Verification isn't complete, which may be affecting your payment" is a diagnosis (R-ESC-8): state the status on its own, and let the ticket or specialist find the cause.
 
 ### R-LOOK-6 · What to do next
 

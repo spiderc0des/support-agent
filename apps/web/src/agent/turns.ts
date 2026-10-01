@@ -8,7 +8,7 @@
  */
 import type { AnswerPath, Channel } from "@relaypay/shared/enums";
 import { emailsSpokenBy } from "./speech-filter.ts";
-import { endCallSuffix } from "./closing.ts";
+import { END_CALL_PHRASE, callerIsLeaving, endCallSuffix } from "./closing.ts";
 import { SupportSession, type TurnResult } from "./support-session.ts";
 import {
   beginTurn,
@@ -166,7 +166,12 @@ async function runTurnNow(input: RunTurnInput): Promise<TurnResult & { turnIndex
 
   let result: TurnResult;
   try {
-    result = await session.sendTurn(content, onText, { callerEmails: emailsSpokenBy([...earlier, userText]) });
+    result = await session.sendTurn(content, onText, {
+      callerEmails: emailsSpokenBy([...earlier, userText]),
+      // The agent may only say the hang-up phrase when the caller is leaving.
+      // A tagged closing (end=yes) still gets it appended below.
+      blockPhrase: callerIsLeaving(userText) ? undefined : END_CALL_PHRASE,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     result = {

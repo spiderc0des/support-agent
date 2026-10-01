@@ -60,12 +60,12 @@ export function customerSummary(c: CustomerRow): { safe_summary: string; routing
   }
   if (c.account_status === "pending verification" || c.kyc_status === "pending") {
     return {
-      safe_summary: `I found the ${c.company_name} account on the ${c.plan} plan. Business verification isn't complete yet, so full payment access opens once it is.`,
+      safe_summary: `I found the ${c.company_name} account on the ${c.plan} plan. Its business verification is still in progress.`,
       routing: {
         ...NONE,
         reason_code: "verification_pending",
         next_step:
-          "General verification questions can be answered from the knowledge base (no timelines). If they have a concern about their own verification, escalate as compliance.",
+          "General verification questions can be answered from the knowledge base (no timelines). If they have a concern about their own verification, escalate as compliance. Do not suggest the pending verification caused any problem they report.",
       },
     };
   }

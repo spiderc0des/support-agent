@@ -109,6 +109,11 @@ async function judge(criteria: string[], r: Records, conversationId: string): Pr
     .select("id, content")
     .in("id", [...new Set(r.retrievals.flatMap((x) => x.chunk_ids))]);
   const transcript = r.turns.map((t) => `Caller: ${t.user_transcript}\nAgent: ${t.assistant_response ?? ""}`).join("\n");
+  const { data: lookups } = await db
+    .from("tool_calls")
+    .select("tool_name, status, result_summary")
+    .eq("conversation_id", conversationId)
+    .like("tool_name", "lookup_%");
   const client = new Anthropic();
   const res = await client.messages.parse({
     model: JUDGE_MODEL,
@@ -116,7 +121,9 @@ async function judge(criteria: string[], r: Records, conversationId: string): Pr
     output_config: { format: zodOutputFormat(Verdicts), effort: "medium" },
     system:
       "You grade a voice customer-support agent for RelayPay against specific criteria. Judge only what the agent said in the transcript. " +
-      "Passages are the approved knowledge the agent retrieved; an agent statement not supported by them counts as invented. Be strict and literal. " +
+      "Passages are the approved knowledge the agent retrieved; a product or policy statement not supported by them counts as invented. " +
+      "Facts about the caller's own account, transaction or payout may also come from the account lookups listed (the agent reads a customer-safe summary of the record); those are not invented. Be strict and literal. " +
+      "Account lookups made: " + JSON.stringify(lookups ?? []) + ". " +
       "Records note: " + JSON.stringify({ tickets: r.tickets, escalations: r.escalations }),
     messages: [
       {

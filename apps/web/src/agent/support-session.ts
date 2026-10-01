@@ -214,7 +214,7 @@ export class SupportSession {
    * Send one caller utterance. `onText` receives speakable text as soon as a
    * sentence is complete; the promise resolves when the turn ends.
    */
-  async sendTurn(userText: string, onText: (text: string) => void, opts: { timeoutMs?: number; callerEmails?: string[] } = {}): Promise<TurnResult> {
+  async sendTurn(userText: string, onText: (text: string) => void, opts: { timeoutMs?: number; callerEmails?: string[]; blockPhrase?: string } = {}): Promise<TurnResult> {
     if (this.closed) throw new Error(this.fatalError ?? "Session is closed");
     // Not awaited: init only arrives after this turn's message is sent. A
     // failure to start settles the turn through consume()'s error path.
@@ -228,7 +228,7 @@ export class SupportSession {
     return new Promise<TurnResult>((resolve) => {
       let markDone: () => void = () => {};
       const turn: PendingTurn = {
-        filter: new SpeechFilter(opts.callerEmails ?? []),
+        filter: new SpeechFilter(opts.callerEmails ?? [], { blockPhrase: opts.blockPhrase }),
         startedAt: Date.now(),
         firstTokenAt: null,
         toolsUsed: [],

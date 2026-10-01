@@ -394,3 +394,19 @@ test("every tool call produced exactly one tool_calls row", async () => {
     ["search_knowledge_base:success", "lookup_transaction:not_found", "lookup_payout:success"],
   );
 });
+
+test("a callback time given after the escalation was created is added to it, not lost", async () => {
+  const s = await session();
+  const base = { user_name: "Efua Mensah", user_email: "efua@accrastack.example", category: "account", reason: "Account restricted; caller says nobody is helping." };
+  const first = await s.call("create_escalation", base);
+  assert.equal(first.body.call_booked, false);
+  const later = await s.call("create_escalation", { ...base, preferred_time: "tomorrow at 10am" });
+  assert.equal(later.body.escalation_id, first.body.escalation_id);
+  assert.equal(later.body.call_booked, true);
+  const rows = await s.rows("select preferred_time_text, call_booked from escalations where conversation_id = $1");
+  assert.deepEqual(rows, [{ preferred_time_text: "tomorrow at 10am", call_booked: true }]);
+  // A third call with a different time does not overwrite what the caller said first.
+  await s.call("create_escalation", { ...base, preferred_time: "Friday" });
+  const [after] = await s.rows("select preferred_time_text from escalations where conversation_id = $1");
+  assert.equal(after.preferred_time_text, "tomorrow at 10am");
+});

@@ -79,8 +79,19 @@ export class SpeechFilter {
   malformedTag = false;
   redactions: string[] = [];
 
-  constructor(callerEmails: Iterable<string> = []) {
+  /**
+   * When set, sentences carrying this phrase are dropped from speech. Used
+   * for the end-call phrase when the caller has not said they are leaving:
+   * Vapi hangs up the instant it hears the phrase, so a premature goodbye
+   * (after an escalation, say) must never reach it.
+   */
+  private readonly blockedPhrase: RegExp | null;
+  blockedPhraseRemoved = false;
+
+  constructor(callerEmails: Iterable<string> = [], opts: { blockPhrase?: string } = {}) {
     this.callerEmails = new Set([...callerEmails].map((e) => e.toLowerCase()));
+    const phrase = opts.blockPhrase?.replace(/\.$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    this.blockedPhrase = phrase ? new RegExp(`[^.!?]*\\b${phrase}\\b[^.!?]*[.!?]?\\s*`, "gi") : null;
   }
 
   /** Feed a text delta; returns text ready to speak now (possibly ""). */
@@ -138,7 +149,13 @@ export class SpeechFilter {
     if (cut === 0) return "";
     const ready = body.slice(0, cut);
     this.pending = this.pending.slice(cut);
-    const { text: redacted, redactions } = redact(ready.replace(TAG_RE, ""), this.callerEmails);
+    let speakable = ready.replace(TAG_RE, "");
+    if (this.blockedPhrase && this.blockedPhrase.test(speakable)) {
+      this.blockedPhrase.lastIndex = 0;
+      speakable = speakable.replace(this.blockedPhrase, "");
+      this.blockedPhraseRemoved = true;
+    }
+    const { text: redacted, redactions } = redact(speakable, this.callerEmails);
     // Where the pre-tool sentence meets the post-tool text, don't double the space.
     const text = /\s$/.test(this.spoken) ? redacted.replace(/^\s+/, "") : redacted;
     this.redactions.push(...redactions);

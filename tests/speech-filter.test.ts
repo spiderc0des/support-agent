@@ -77,3 +77,17 @@ test("spoken emails in transcripts are recognised as the caller's", () => {
   assert.deepEqual(emailsSpokenBy(["it's efua at accrastack dot example thanks"]), ["efua@accrastack.example"]);
   assert.deepEqual(emailsSpokenBy(["amara@lagosledger.example"]), ["amara@lagosledger.example"]);
 });
+
+test("a premature end-call phrase is removed before Vapi can hang up on it", () => {
+  const f = new SpeechFilter([], { blockPhrase: "Goodbye from RelayPay." });
+  let out = f.push("A specialist will follow up by email. Your reference is E S C 1 0 4. Goodbye from RelayPay. ");
+  out += f.flush();
+  assert.equal(out.trim(), "A specialist will follow up by email. Your reference is E S C 1 0 4.");
+  assert.equal(f.blockedPhraseRemoved, true);
+});
+
+test("the phrase is untouched when the caller is leaving (no block set)", () => {
+  const f = new SpeechFilter();
+  const out = f.push("Thanks for calling. Goodbye from RelayPay. ") + f.flush();
+  assert.match(out, /Goodbye from RelayPay\./);
+});
