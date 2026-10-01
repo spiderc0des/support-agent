@@ -208,7 +208,12 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
       <div className="actions">
         {inCall || state === "connecting" ? (
           <>
+            {/* Distinct keys: the Start and End confirmations render in the same
+                place, and without them React reuses one instance, so the Start
+                confirmation's open state reappeared as "End the call?" while
+                the call was connecting. */}
             <ConfirmButton
+              key="end-call"
               label="End call"
               confirmLabel="End call"
               question="End the call?"
@@ -222,12 +227,15 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
           </>
         ) : (
           <ConfirmButton
+            key="start-call"
             label={state === "ended" || state === "error" ? "Start a new call" : "Start call"}
             confirmLabel="Start call"
             question="Start a voice call with RelayPay support?"
             detail="Your browser will ask to use your microphone. The conversation is logged so our team can follow up."
             variant="primary"
-            onConfirm={start}
+            // Don't hold the confirmation open while the call connects (several
+            // seconds); the status line and ring show progress from here.
+            onConfirm={() => void start()}
           />
         )}
       </div>
