@@ -2,6 +2,12 @@
   "name": "RelayPay Support",
   "firstMessage": "Hi, you've reached RelayPay support. How can I help you today?",
   "firstMessageMode": "assistant-speaks-first",
+  "firstMessageInterruptionsEnabled": true,
+  "stopSpeakingPlan": {
+    "numWords": 0,
+    "voiceSeconds": 0.2,
+    "backoffSeconds": 1
+  },
   "model": {
     "provider": "custom-llm",
     "url": "${APP_URL}/api/vapi",

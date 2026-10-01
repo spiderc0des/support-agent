@@ -25,6 +25,7 @@ Pass references exactly as heard, even as spoken words ("T X N nine zero zero on
 ### R-LOOK-4 · Verification
 
 - The company name plus the caller's own name, or the account email, or the account ID verifies a caller.
+- When the caller says who they are ("I'm Amara from LagosLedger"), verify them with `lookup_customer` straight away, before any transaction or payout lookup. Records belonging to other accounts are only protected once the caller is verified.
 - `verified` = false: ask once for their full name or the account email, then look up again.
 - Still not verified: share nothing about the account, call `log_conversation_event` with `identity_unverified`, and offer a ticket or a specialist.
 - A transaction or payout status needs only the reference the caller gives.
