@@ -59,10 +59,13 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
       <div className="page-head">
         <div>
           <h1>
-            {ticket.ticket_id} <StatusPill value={ticket.status} /> <StatusPill value={ticket.priority} label={`${ticket.priority} priority`} />
+            {ticket.ticket_id}
+            {escalation ? <span className="muted"> + {escalation.escalation_id}</span> : null} <StatusPill value={(escalation ?? ticket).status} />{" "}
+            <StatusPill value={ticket.priority} label={`${ticket.priority} priority`} />
           </h1>
           <p className="muted">
-            {ticket.category} · opened <When iso={ticket.created_at} /> · owner: {name(ticket.assigned_to) ?? "unassigned"}
+            {escalation ? "escalated case · " : ""}
+            {ticket.category} · opened <When iso={ticket.created_at} /> · owner: {name((escalation ?? ticket).assigned_to) ?? "unassigned"}
           </p>
         </div>
         {ticket.conversation_id ? (
@@ -98,7 +101,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                 <h2>
                   Escalation {escalation.escalation_id} <StatusPill value={escalation.status} />
                 </h2>
-                <span className="muted">owner: {name(escalation.assigned_to) ?? "unassigned"}</span>
+                <span className="muted">a specialist contacts the caller</span>
               </div>
               <dl className="facts">
                 <dt>Why</dt>
@@ -130,14 +133,6 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                   </>
                 ) : null}
               </dl>
-              <CaseActions
-                kind="escalation"
-                id={escalation.escalation_id}
-                status={escalation.status}
-                assignedToMe={escalation.assigned_to === me.id}
-                assigneeName={escalation.assigned_to && escalation.assigned_to !== me.id ? name(escalation.assigned_to) : null}
-                meId={me.id}
-              />
             </section>
           ) : null}
 
@@ -171,15 +166,32 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
 
         <div className="stack">
           <section className="panel">
-            <h2>Ticket actions</h2>
-            <CaseActions
-              kind="ticket"
-              id={ticket.ticket_id}
-              status={ticket.status}
-              assignedToMe={ticket.assigned_to === me.id}
-              assigneeName={ticket.assigned_to && ticket.assigned_to !== me.id ? name(ticket.assigned_to) : null}
-              meId={me.id}
-            />
+            <h2>{escalation ? "Case actions" : "Ticket actions"}</h2>
+            {escalation ? (
+              <p className="muted">
+                {ticket.ticket_id} and {escalation.escalation_id} are one case: assigning, starting or closing applies to both.
+              </p>
+            ) : null}
+            {escalation ? (
+              <CaseActions
+                kind="escalation"
+                id={escalation.escalation_id}
+                caseLabel={`${ticket.ticket_id} and ${escalation.escalation_id}`}
+                status={escalation.status}
+                assignedToMe={escalation.assigned_to === me.id}
+                assigneeName={escalation.assigned_to && escalation.assigned_to !== me.id ? name(escalation.assigned_to) : null}
+                meId={me.id}
+              />
+            ) : (
+              <CaseActions
+                kind="ticket"
+                id={ticket.ticket_id}
+                status={ticket.status}
+                assignedToMe={ticket.assigned_to === me.id}
+                assigneeName={ticket.assigned_to && ticket.assigned_to !== me.id ? name(ticket.assigned_to) : null}
+                meId={me.id}
+              />
+            )}
           </section>
 
           <section className="panel">
@@ -206,7 +218,6 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                   </span>
                   <span>
                     <strong>{name(e.actor_id) ?? "Someone"}</strong> {ACTION_TEXT[e.action] ?? e.action}
-                    {e.escalation_id ? ` on ${e.escalation_id}` : ""}
                     {e.action === "status_changed" ? ` from ${String(e.from_value).replace("_", " ")} to ${String(e.to_value).replace("_", " ")}` : ""}
                     {e.action === "assigned" ? ` to ${name(e.to_value)}` : ""}
                     {e.action === "callback_scheduled" && e.to_value ? (

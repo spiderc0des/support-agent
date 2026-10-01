@@ -2,14 +2,16 @@ import "server-only";
 import { z } from "zod";
 import { supabaseAdmin } from "@relaypay/shared/supabase";
 import { RECORD_STATUSES } from "@relaypay/shared/enums";
+import { CasePlanError, planCaseChange, type EscalationRow, type TicketRow } from "./case-plan";
 
 /**
  * Working a ticket or an escalation. The only writes staff make.
  *
- * Every change is one update plus one case_events row, so the audit trail on
- * the ticket page is complete by construction. Status "closed" stamps
- * closed_at and requires a resolution note: a case closed with no record of
- * what was done is a case nobody can follow up on.
+ * A ticket and the escalation on it are one case: see case-plan.ts for the
+ * rules. Every action is logged once in case_events, so the audit trail on
+ * the ticket page is complete by construction. Closing stamps closed_at and
+ * requires a resolution note: a case closed with no record of what was done
+ * is a case nobody can follow up on.
  */
 export const CaseChange = z
   .object({
@@ -33,13 +35,31 @@ export class CaseError extends Error {
 
 export async function applyCaseChange(kind: "ticket" | "escalation", id: string, change: CaseChange, actor: Actor) {
   const db = supabaseAdmin();
-  const table = kind === "ticket" ? "support_tickets" : "escalations";
-  const key = kind === "ticket" ? "ticket_id" : "escalation_id";
 
-  const { data: row, error: readErr } = await db.from(table).select("*").eq(key, id).maybeSingle();
-  if (readErr) throw new Error(readErr.message);
-  if (!row) throw new CaseError(`${kind === "ticket" ? "Ticket" : "Escalation"} ${id} not found`, 404);
-  if (change.callback_at && kind !== "escalation") throw new CaseError("Only escalations have a callback time", 400);
+  // Load the whole case, whichever record the action came from.
+  let ticket: TicketRow | null = null;
+  let escalation: EscalationRow | null = null;
+  if (kind === "escalation") {
+    const { data, error } = await db.from("escalations").select("escalation_id, ticket_id, status, assigned_to, callback_at").eq("escalation_id", id).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new CaseError(`Escalation ${id} not found`, 404);
+    escalation = data as EscalationRow;
+  }
+  const ticketId = escalation?.ticket_id ?? id;
+  const { data: t, error: tErr } = await db.from("support_tickets").select("ticket_id, status, assigned_to").eq("ticket_id", ticketId).maybeSingle();
+  if (tErr) throw new Error(tErr.message);
+  if (!t) throw new CaseError(`Ticket ${ticketId} not found`, 404);
+  ticket = t as TicketRow;
+  if (!escalation) {
+    const { data: e } = await db
+      .from("escalations")
+      .select("escalation_id, ticket_id, status, assigned_to, callback_at")
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    escalation = (e as EscalationRow | null) ?? null;
+  }
 
   let assignee: string | null | undefined;
   if (change.assign === "me") assignee = actor.id;
@@ -51,40 +71,31 @@ export async function applyCaseChange(kind: "ticket" | "escalation", id: string,
     assignee = person.id;
   }
 
-  if (change.status === "closed" && row.status !== "closed" && !change.note) {
-    throw new CaseError("Add a resolution note to close this", 400);
+  let plan;
+  try {
+    plan = planCaseChange({
+      ticket,
+      escalation,
+      change: { status: change.status, assignee, note: change.note, callbackAt: change.callback_at },
+      actorId: actor.id,
+      now: new Date().toISOString(),
+    });
+  } catch (err) {
+    if (err instanceof CasePlanError) throw new CaseError(err.message, err.status);
+    throw err;
   }
 
-  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  const events: Record<string, unknown>[] = [];
-  const ticketId = kind === "ticket" ? id : (row.ticket_id as string);
-  const base = { ticket_id: ticketId, escalation_id: kind === "escalation" ? id : null, actor_id: actor.id };
-
-  if (change.status && change.status !== row.status) {
-    update.status = change.status;
-    update.closed_at = change.status === "closed" ? new Date().toISOString() : null;
-    if (change.status === "closed") update.resolution_note = change.note;
-    events.push({ ...base, action: "status_changed", from_value: row.status, to_value: change.status, note: change.status === "closed" ? change.note : null });
-  }
-  if (assignee !== undefined && assignee !== row.assigned_to) {
-    update.assigned_to = assignee;
-    events.push({ ...base, action: assignee ? "assigned" : "unassigned", from_value: row.assigned_to, to_value: assignee });
-  }
-  if (change.callback_at) {
-    update.callback_at = change.callback_at;
-    update.call_booked = true;
-    events.push({ ...base, action: "callback_scheduled", from_value: row.callback_at, to_value: change.callback_at });
-  }
-  if (change.note && !(change.status === "closed" && row.status !== "closed")) {
-    events.push({ ...base, action: "note_added", note: change.note });
-  }
-  if (events.length === 0) throw new CaseError("Nothing changed", 409);
-
-  if (Object.keys(update).length > 1) {
-    const { error } = await db.from(table).update(update).eq(key, id);
+  if (plan.escalationUpdate && escalation) {
+    const { error } = await db.from("escalations").update(plan.escalationUpdate).eq("escalation_id", escalation.escalation_id);
     if (error) throw new Error(error.message);
   }
-  const { error: evErr } = await db.from("case_events").insert(events);
-  if (evErr) throw new Error(`Saved, but the audit entry failed: ${evErr.message}`);
-  return { changed: events.map((e) => e.action as string) };
+  if (plan.ticketUpdate) {
+    const { error } = await db.from("support_tickets").update(plan.ticketUpdate).eq("ticket_id", ticket.ticket_id);
+    if (error) throw new Error(error.message);
+  }
+  if (plan.events.length) {
+    const { error: evErr } = await db.from("case_events").insert(plan.events);
+    if (evErr) throw new Error(`Saved, but the audit entry failed: ${evErr.message}`);
+  }
+  return { changed: plan.events.map((e) => e.action), case: { ticket_id: ticket.ticket_id, escalation_id: escalation?.escalation_id ?? null } };
 }

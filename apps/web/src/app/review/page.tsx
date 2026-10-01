@@ -32,7 +32,7 @@ export default async function Overview() {
       .neq("status", "closed")
       .order("created_at", { ascending: true })
       .limit(8),
-    supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).is("assigned_to", null).eq("status", "open"),
+    unassignedTickets(supabase),
     supabase.from("conversations").select("id, channel, status, total_cost_usd").gte("started_at", since).neq("channel", "eval"),
     supabase.from("conversation_turns").select("answer_type, first_token_ms, conversation_id, conversations!inner(channel)").gte("created_at", since).neq("conversations.channel", "eval"),
   ]);
@@ -162,4 +162,13 @@ export default async function Overview() {
       </section>
     </>
   );
+}
+
+/** Open, unassigned tickets that aren't already escalations (those show in Open escalations). */
+async function unassignedTickets(supabase: Awaited<ReturnType<typeof supabaseServer>>) {
+  const { data: escalated } = await supabase.from("escalations").select("ticket_id");
+  const ids = (escalated ?? []).map((e) => `"${e.ticket_id}"`).join(",");
+  let q = supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).is("assigned_to", null).eq("status", "open");
+  if (ids) q = q.not("ticket_id", "in", `(${ids})`);
+  return q;
 }

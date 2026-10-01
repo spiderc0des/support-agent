@@ -8,10 +8,13 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+// Open and Unassigned are the ticket queue: tickets with an escalation are
+// worked as escalations (one case), so they're listed under Escalated instead.
 const VIEWS = [
   { key: "open", label: "Open" },
   { key: "mine", label: "Mine" },
   { key: "unassigned", label: "Unassigned" },
+  { key: "escalated", label: "Escalated" },
   { key: "closed", label: "Closed" },
   { key: "all", label: "All" },
 ] as const;
@@ -30,10 +33,15 @@ export default async function Tickets({ searchParams }: { searchParams: Promise<
     .select("ticket_id, conversation_id, customer_id, transaction_id, payout_id, category, priority, summary, status, assigned_to, created_at, updated_at")
     .order("created_at", { ascending: false })
     .limit(200);
-  if (view === "open") q = q.neq("status", "closed");
+  const { data: escalatedRows } = await supabase.from("escalations").select("ticket_id");
+  const escalatedList = (escalatedRows ?? []).map((e) => `"${e.ticket_id}"`).join(",");
+  const notEscalated = <T extends { not: (c: string, o: string, v: string) => T }>(query: T) =>
+    escalatedList ? query.not("ticket_id", "in", `(${escalatedList})`) : query;
+  if (view === "open") q = notEscalated(q.neq("status", "closed"));
+  if (view === "escalated") q = escalatedList ? q.in("ticket_id", (escalatedRows ?? []).map((e) => e.ticket_id)).neq("status", "closed") : q.eq("ticket_id", "__none__");
   if (view === "closed") q = q.eq("status", "closed");
   if (view === "mine") q = q.eq("assigned_to", me.id).neq("status", "closed");
-  if (view === "unassigned") q = q.is("assigned_to", null).neq("status", "closed");
+  if (view === "unassigned") q = notEscalated(q.is("assigned_to", null).neq("status", "closed"));
   if (sp.priority && (PRIORITIES as readonly string[]).includes(sp.priority)) q = q.eq("priority", sp.priority);
   if (sp.category && (TICKET_CATEGORIES as readonly string[]).includes(sp.category)) q = q.eq("category", sp.category);
   const search = sp.q?.trim().slice(0, 80);

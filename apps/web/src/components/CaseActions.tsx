@@ -16,7 +16,10 @@ export function CaseActions({
   assignedToMe,
   assigneeName,
   meId,
+  caseLabel,
 }: {
+  /** How the case is named in confirmations, e.g. "TCK-1002 and ESC-101". Defaults to the id. */
+  caseLabel?: string;
   kind: "ticket" | "escalation";
   id: string;
   status: string;
@@ -30,7 +33,9 @@ export function CaseActions({
   const [resolution, setResolution] = useState("");
   const [note, setNote] = useState("");
   const [callback, setCallback] = useState("");
-  const noun = kind === "ticket" ? "ticket" : "escalation";
+  // A ticket with an escalation on it is one case; actions apply to both.
+  const noun = caseLabel ? "case" : kind === "ticket" ? "ticket" : "escalation";
+  const label = caseLabel ?? id;
 
   async function send(body: Record<string, unknown>, success: string) {
     setBusy(true);
@@ -54,7 +59,7 @@ export function CaseActions({
           <ConfirmButton
             label="Release"
             confirmLabel="Release it"
-            question={`Release ${id}?`}
+            question={`Release ${label}?`}
             detail="It goes back to the unassigned queue for anyone to pick up."
             busy={busy}
             onConfirm={() => send({ assign: "none" }, "Released.").then(() => undefined)}
@@ -63,7 +68,7 @@ export function CaseActions({
           <ConfirmButton
             label={assigneeName ? `Take over from ${assigneeName}` : "Assign to me"}
             confirmLabel="Assign to me"
-            question={`Take ${id}?`}
+            question={`Take ${label}?`}
             detail={assigneeName ? `${assigneeName} is working on it now. They'll no longer be the owner.` : `You'll be the owner of this ${noun}.`}
             variant="primary"
             busy={busy}
@@ -75,7 +80,7 @@ export function CaseActions({
           <ConfirmButton
             label="Start work"
             confirmLabel="Mark in progress"
-            question={`Mark ${id} as in progress?`}
+            question={`Mark ${label} as in progress?`}
             detail={assignedToMe ? undefined : "It will also be assigned to you."}
             busy={busy}
             onConfirm={() =>
@@ -88,7 +93,7 @@ export function CaseActions({
           <ConfirmButton
             label={`Close ${noun}`}
             confirmLabel={`Close ${noun}`}
-            question={`Close ${id}?`}
+            question={`Close ${label}?`}
             detail="Say what was done. The note is kept on the record."
             tone="danger"
             busy={busy}
@@ -97,7 +102,7 @@ export function CaseActions({
                 setMessage({ ok: false, text: "Add a resolution note first." });
                 return false;
               }
-              const ok = await send({ status: "closed", note: resolution.trim() }, `${id} closed.`);
+              const ok = await send({ status: "closed", note: resolution.trim() }, `${label} closed.`);
               if (ok) setResolution("");
               return ok;
             }}
@@ -115,7 +120,7 @@ export function CaseActions({
           <ConfirmButton
             label="Reopen"
             confirmLabel="Reopen"
-            question={`Reopen ${id}?`}
+            question={`Reopen ${label}?`}
             detail="It goes back to open."
             busy={busy}
             onConfirm={() => send({ status: "open" }, "Reopened.").then(() => undefined)}

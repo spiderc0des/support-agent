@@ -30,8 +30,13 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   }
 
   const supabase = await supabaseServer();
+  // A ticket with an escalation is counted once, as an escalation.
+  const { data: escalated } = await supabase.from("escalations").select("ticket_id");
+  const escalatedIds = (escalated ?? []).map((e) => `"${e.ticket_id}"`).join(",");
+  let ticketQuery = supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).neq("status", "closed");
+  if (escalatedIds) ticketQuery = ticketQuery.not("ticket_id", "in", `(${escalatedIds})`);
   const [tickets, escalations] = await Promise.all([
-    supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).neq("status", "closed"),
+    ticketQuery,
     supabase.from("escalations").select("escalation_id", { count: "exact", head: true }).neq("status", "closed"),
   ]);
 
