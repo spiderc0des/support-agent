@@ -14,9 +14,9 @@ export default async function ProfilePage() {
   const supabase = await supabaseServer();
   const [{ data: authUser }, openTickets, closedByMe, escalations] = await Promise.all([
     supabaseAdmin().auth.admin.getUserById(me.id),
-    supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).eq("assigned_to", me.id).neq("status", "closed"),
+    supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).eq("assigned_to", me.id).neq("status", "closed").is("deleted_at", null),
     supabase.from("case_events").select("id", { count: "exact", head: true }).eq("actor_id", me.id).eq("action", "status_changed").eq("to_value", "closed"),
-    supabase.from("escalations").select("escalation_id", { count: "exact", head: true }).eq("assigned_to", me.id).neq("status", "closed"),
+    supabase.from("escalations").select("escalation_id", { count: "exact", head: true }).eq("assigned_to", me.id).neq("status", "closed").is("deleted_at", null),
   ]);
 
   return (

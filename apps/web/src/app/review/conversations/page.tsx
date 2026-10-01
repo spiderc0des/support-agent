@@ -17,6 +17,7 @@ export default async function Conversations({ searchParams }: { searchParams: Pr
   let q = supabase
     .from("conversations")
     .select("id, channel, status, started_at, ended_at, num_turns, total_cost_usd, summary, caller_identifier, customer_id", { count: "exact" })
+    .is("deleted_at", null)
     .order("started_at", { ascending: false })
     .range((page - 1) * PAGE, page * PAGE - 1);
   if (sp.channel && (CHANNELS as readonly string[]).includes(sp.channel)) q = q.eq("channel", sp.channel);
@@ -26,7 +27,7 @@ export default async function Conversations({ searchParams }: { searchParams: Pr
 
   const ids = (rows ?? []).map((r) => r.id);
   const { data: tickets } = ids.length
-    ? await supabase.from("support_tickets").select("ticket_id, conversation_id").in("conversation_id", ids)
+    ? await supabase.from("support_tickets").select("ticket_id, conversation_id").in("conversation_id", ids).is("deleted_at", null)
     : { data: [] as { ticket_id: string; conversation_id: string }[] };
   const ticketsBy = new Map<string, string[]>();
   for (const t of tickets ?? []) ticketsBy.set(t.conversation_id, [...(ticketsBy.get(t.conversation_id) ?? []), t.ticket_id]);

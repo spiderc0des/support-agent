@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@relaypay/shared/supabase";
+import { DeleteControl } from "@/components/DeleteControl";
 import { InviteForm } from "@/components/InviteForm";
 import { TeamTable, type TeamMember } from "@/components/TeamTable";
 import { When } from "@/components/When";
@@ -35,10 +36,38 @@ export default async function AdminPage() {
   const [{ data: profiles }, { data: authList }, { data: open }, { data: lastEval }, mcpOk] = await Promise.all([
     db.from("profiles").select("id, email, full_name, role, created_at").order("created_at"),
     db.auth.admin.listUsers({ perPage: 1000 }),
-    db.from("support_tickets").select("assigned_to").neq("status", "closed").not("assigned_to", "is", null),
-    db.from("eval_runs").select("id, model, started_at, passed, total, cost_usd").order("started_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("support_tickets").select("assigned_to").neq("status", "closed").not("assigned_to", "is", null).is("deleted_at", null),
+    db.from("eval_runs").select("id, model, started_at, passed, total, cost_usd").is("deleted_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
     mcpHealthy(),
   ]);
+
+  // Recently deleted, across every kind that can be deleted.
+  const [{ data: delTickets }, { data: delConvs }, { data: delRuns }, { data: delEscs }] = await Promise.all([
+    db.from("support_tickets").select("ticket_id, summary, deleted_at, deleted_by, delete_reason").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
+    db.from("conversations").select("id, channel, started_at, deleted_at, deleted_by, delete_reason").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
+    db.from("eval_runs").select("id, model, started_at, passed, total, deleted_at, deleted_by, delete_reason").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
+    db.from("escalations").select("escalation_id, ticket_id").not("deleted_at", "is", null),
+  ]);
+  const escOf = new Map((delEscs ?? []).map((e) => [e.ticket_id, e.escalation_id]));
+  const who = (id: string | null) => (profiles ?? []).find((p) => p.id === id)?.full_name ?? (profiles ?? []).find((p) => p.id === id)?.email ?? "someone";
+  type Deleted = { key: string; kind: "case" | "conversation" | "eval_run"; id: string; title: string; href: string; at: string; by: string; reason: string | null };
+  const deleted: Deleted[] = [
+    ...(delTickets ?? []).map((t) => ({
+      key: `t-${t.ticket_id}`, kind: "case" as const, id: t.ticket_id,
+      title: `${t.ticket_id}${escOf.get(t.ticket_id) ? ` + ${escOf.get(t.ticket_id)}` : ""} · ${t.summary}`,
+      href: `/review/tickets/${t.ticket_id}`, at: t.deleted_at, by: who(t.deleted_by), reason: t.delete_reason,
+    })),
+    ...(delConvs ?? []).map((c) => ({
+      key: `c-${c.id}`, kind: "conversation" as const, id: c.id,
+      title: `${c.channel.replace("_", " ")} conversation from ${new Date(c.started_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`,
+      href: `/review/conversations/${c.id}`, at: c.deleted_at, by: who(c.deleted_by), reason: c.delete_reason,
+    })),
+    ...(delRuns ?? []).map((r) => ({
+      key: `r-${r.id}`, kind: "eval_run" as const, id: r.id,
+      title: `Eval run ${r.model} · ${r.passed ?? "?"}/${r.total ?? "?"}`,
+      href: `/review/evals?run=${r.id}`, at: r.deleted_at, by: who(r.deleted_by), reason: r.delete_reason,
+    })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
 
   const lastSignIn = new Map((authList?.users ?? []).map((u) => [u.id, u.last_sign_in_at ?? null]));
   const openBy = new Map<string, number>();
@@ -74,6 +103,28 @@ export default async function AdminPage() {
           </span>
         </div>
         <TeamTable members={members} meId={me.id} />
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Recently deleted</h2>
+          <span className="muted">hidden from queues and counts, never erased</span>
+        </div>
+        {deleted.length ? (
+          <ul className="list">
+            {deleted.map((d) => (
+              <li key={d.key}>
+                <span className="list-main">
+                  <Link href={d.href}>{d.title}</Link>
+                  <span className="muted"> · deleted by {d.by}, <When iso={d.at} mode="relative" />{d.reason ? `: ${d.reason}` : ""}</span>
+                </span>
+                <DeleteControl kind={d.kind} id={d.id} label={d.title.split(" · ")[0]} detail="" deleted />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">Nothing deleted.</p>
+        )}
       </section>
 
       <div className="grid-2">

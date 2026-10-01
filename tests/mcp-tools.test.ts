@@ -410,3 +410,24 @@ test("a callback time given after the escalation was created is added to it, not
   const [after] = await s.rows("select preferred_time_text from escalations where conversation_id = $1");
   assert.equal(after.preferred_time_text, "tomorrow at 10am");
 });
+
+test("a soft-deleted ticket is never handed back by dedupe; a new one is opened", async () => {
+  const s = await session();
+  const args = { category: "payment", priority: "medium", summary: "Delayed transfer the caller wants chased." };
+  const first = await s.call("create_support_ticket", args);
+  await db.query("update support_tickets set deleted_at = now(), delete_reason = 'test' where ticket_id = $1", [first.body.ticket_id]);
+  const second = await s.call("create_support_ticket", args);
+  assert.notEqual(second.body.ticket_id, first.body.ticket_id);
+  assert.equal(second.body.deduplicated, false);
+});
+
+test("an escalation never reuses a deleted ticket the model names", async () => {
+  const s = await session();
+  const t = await s.call("create_support_ticket", { category: "account", priority: "high", summary: "Account locked, caller wants help." });
+  await db.query("update support_tickets set deleted_at = now() where ticket_id = $1", [t.body.ticket_id]);
+  const e = await s.call("create_escalation", {
+    user_name: "Efua", user_email: "efua@accrastack.example", category: "account",
+    reason: "Account locked and the caller needs a specialist.", ticket_id: t.body.ticket_id,
+  });
+  assert.notEqual(e.body.ticket_id, t.body.ticket_id);
+});

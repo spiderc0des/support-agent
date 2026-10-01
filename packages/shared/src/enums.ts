@@ -70,6 +70,8 @@ export type AgentEventType = z.infer<typeof AgentEventType>;
 
 /** Event types only code writes. The agent cannot log these. */
 export const SYSTEM_EVENT_TYPES = [
+  "record_deleted",
+  "record_restored",
   "ticket_created",
   "escalation_created",
   "customer_verified",
@@ -95,5 +97,5 @@ export type StaffRole = z.infer<typeof StaffRole>;
 export const ROLE_LABEL: Record<StaffRole, string> = { support_agent: "Support agent", admin: "Admin" };
 
 /** What a person can do to a ticket or escalation; each is one case_events row. */
-export const CASE_ACTIONS = ["status_changed", "assigned", "unassigned", "note_added", "callback_scheduled"] as const;
+export const CASE_ACTIONS = ["status_changed", "assigned", "unassigned", "note_added", "callback_scheduled", "deleted", "restored"] as const;
 export type CaseAction = (typeof CASE_ACTIONS)[number];

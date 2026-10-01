@@ -31,9 +31,10 @@ export default async function Tickets({ searchParams }: { searchParams: Promise<
   let q = supabase
     .from("support_tickets")
     .select("ticket_id, conversation_id, customer_id, transaction_id, payout_id, category, priority, summary, status, assigned_to, created_at, updated_at")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(200);
-  const { data: escalatedRows } = await supabase.from("escalations").select("ticket_id");
+  const { data: escalatedRows } = await supabase.from("escalations").select("ticket_id").is("deleted_at", null);
   const escalatedList = (escalatedRows ?? []).map((e) => `"${e.ticket_id}"`).join(",");
   const notEscalated = <T extends { not: (c: string, o: string, v: string) => T }>(query: T) =>
     escalatedList ? query.not("ticket_id", "in", `(${escalatedList})`) : query;

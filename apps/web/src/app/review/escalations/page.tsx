@@ -26,6 +26,7 @@ export default async function Escalations({ searchParams }: { searchParams: Prom
   let q = supabase
     .from("escalations")
     .select("escalation_id, ticket_id, conversation_id, customer_id, user_name, user_email, category, reason, call_booked, preferred_time_text, callback_at, status, assigned_to, created_at")
+    .is("deleted_at", null)
     .order("created_at", { ascending: view === "closed" || view === "all" ? false : true })
     .limit(200);
   if (view === "open") q = q.neq("status", "closed");

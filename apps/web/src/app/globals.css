@@ -263,3 +263,6 @@ a.tile:hover { border-color: var(--brand); }
   .inline-row { flex-direction: column; }
   .header { padding: 14px 16px; }
 }
+
+.delete-control { margin-top: 4px; }
+.deleted-banner { margin: 0 0 14px; }

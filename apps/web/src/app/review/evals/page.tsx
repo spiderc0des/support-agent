@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { DeleteControl } from "@/components/DeleteControl";
 import { StatusPill } from "@/components/StatusPill";
+import { currentProfile } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +12,11 @@ type CheckResult = { check: string; passed: boolean; detail: string };
 export default async function Evals({ searchParams }: { searchParams: Promise<{ run?: string }> }) {
   const { run: runParam } = await searchParams;
   const supabase = await supabaseServer();
+  const me = await currentProfile();
   const { data: runs } = await supabase
     .from("eval_runs")
     .select("id, model, git_sha, started_at, total, passed, cost_usd")
+    .is("deleted_at", null)
     .order("started_at", { ascending: false })
     .limit(20);
   const runId = runParam ?? runs?.[0]?.id;
@@ -29,6 +33,9 @@ export default async function Evals({ searchParams }: { searchParams: Promise<{ 
     <>
       <div className="page-head">
         <h1>Evaluations</h1>
+        {me?.role === "admin" && runId ? (
+          <DeleteControl kind="eval_run" id={runId} label="this eval run" detail="The run and its results are hidden from this page." deleted={false} afterDelete="/review/evals" />
+        ) : null}
       </div>
       <div>
         <div className="filters" aria-label="Eval runs">

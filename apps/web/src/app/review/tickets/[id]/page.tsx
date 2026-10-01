@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CaseActions } from "@/components/CaseActions";
+import { DeleteControl, DeletedBanner } from "@/components/DeleteControl";
 import { StatusPill } from "@/components/StatusPill";
 import { When } from "@/components/When";
 import { currentProfile, displayName } from "@/lib/auth";
@@ -14,6 +15,8 @@ const ACTION_TEXT: Record<string, string> = {
   unassigned: "released",
   note_added: "added a note",
   callback_scheduled: "scheduled the callback",
+  deleted: "deleted the case",
+  restored: "restored the case",
 };
 
 /**
@@ -40,7 +43,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
     ticket.customer_id ? supabase.from("customers").select("customer_id, company_name, plan, account_status, region").eq("customer_id", ticket.customer_id).maybeSingle() : Promise.resolve({ data: null }),
   ]);
 
-  const personIds = [ticket.assigned_to, escalation?.assigned_to, ...(events ?? []).map((e) => e.actor_id), ...(events ?? []).filter((e) => e.action === "assigned").map((e) => e.to_value)].filter(Boolean) as string[];
+  const personIds = [ticket.deleted_by, ticket.assigned_to, escalation?.assigned_to, ...(events ?? []).map((e) => e.actor_id), ...(events ?? []).filter((e) => e.action === "assigned").map((e) => e.to_value)].filter(Boolean) as string[];
   const { data: people } = personIds.length
     ? await supabase.from("profiles").select("id, full_name, email").in("id", [...new Set(personIds)])
     : { data: [] as { id: string; full_name: string | null; email: string }[] };
@@ -56,6 +59,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
       <p className="crumbs">
         <Link href="/review/tickets">Tickets</Link> / {ticket.ticket_id}
       </p>
+      {ticket.deleted_at ? <DeletedBanner when={ticket.deleted_at} by={name(ticket.deleted_by)} reason={ticket.delete_reason} /> : null}
       <div className="page-head">
         <div>
           <h1>
@@ -193,6 +197,25 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
               />
             )}
           </section>
+
+          {me.role === "admin" ? (
+            <section className="panel">
+              <h2>{ticket.deleted_at ? "Restore" : "Delete"}</h2>
+              <p className="muted">
+                {ticket.deleted_at
+                  ? "Restoring puts the case back in the queues and counts."
+                  : "For test cases and mistakes. The case is hidden from every queue and count, not erased, and can be restored."}
+              </p>
+              <DeleteControl
+                kind="case"
+                id={ticket.ticket_id}
+                label={escalation ? `${ticket.ticket_id} and ${escalation.escalation_id}` : ticket.ticket_id}
+                detail={escalation ? "The ticket and its escalation are deleted together." : "The ticket is hidden from the queue."}
+                deleted={Boolean(ticket.deleted_at)}
+                afterDelete="/review/tickets"
+              />
+            </section>
+          ) : null}
 
           <section className="panel">
             <h2>Activity</h2>

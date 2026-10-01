@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DeleteControl, DeletedBanner } from "@/components/DeleteControl";
 import { StatusPill } from "@/components/StatusPill";
 import { When } from "@/components/When";
+import { currentProfile, displayName } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,10 @@ export default async function Conversation({ params }: { params: Promise<{ id: s
     by("conversation_events", "*"),
   ]);
   if (!conv) notFound();
+  const me = await currentProfile();
+  const { data: deleter } = conv.deleted_by
+    ? await supabase.from("profiles").select("full_name, email").eq("id", conv.deleted_by).maybeSingle()
+    : { data: null };
 
   const T = (turns.data ?? []) as Row[];
   const C = (tools.data ?? []) as Row[];
@@ -41,6 +47,7 @@ export default async function Conversation({ params }: { params: Promise<{ id: s
 
   return (
     <>
+      {conv.deleted_at ? <DeletedBanner when={conv.deleted_at} by={deleter ? displayName(deleter) : null} reason={conv.delete_reason} /> : null}
       <p className="crumbs">
         <Link href="/review/conversations">Conversations</Link> / {conv.channel.replace("_", " ")} call
       </p>
@@ -205,6 +212,25 @@ export default async function Conversation({ params }: { params: Promise<{ id: s
           ))}
         </ol>
       </details>
+
+      {me?.role === "admin" ? (
+        <section className="panel">
+          <h2>{conv.deleted_at ? "Restore" : "Delete"}</h2>
+          <p className="muted">
+            {conv.deleted_at
+              ? "Restoring brings back the call and the cases deleted with it."
+              : `For test calls and mistakes. Hidden, not erased.${K.length ? ` Its ${K.length} case${K.length === 1 ? "" : "s"} go with it.` : ""}`}
+          </p>
+          <DeleteControl
+            kind="conversation"
+            id={conv.id}
+            label="this conversation"
+            detail={K.length ? `Its ${K.length} case${K.length === 1 ? "" : "s"} (${K.map((k) => k.ticket_id).join(", ")}) are deleted with it.` : "It has no cases."}
+            deleted={Boolean(conv.deleted_at)}
+            afterDelete="/review/conversations"
+          />
+        </section>
+      ) : null}
 
       <details className="panel fold">
         <summary>Call facts</summary>

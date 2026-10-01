@@ -23,6 +23,7 @@ export default async function Overview() {
       .from("escalations")
       .select("escalation_id, ticket_id, category, user_name, preferred_time_text, callback_at, status, created_at, assigned_to")
       .neq("status", "closed")
+      .is("deleted_at", null)
       .order("created_at", { ascending: true })
       .limit(8),
     supabase
@@ -30,11 +31,12 @@ export default async function Overview() {
       .select("ticket_id, category, priority, summary, status, created_at")
       .eq("assigned_to", profile.id)
       .neq("status", "closed")
+      .is("deleted_at", null)
       .order("created_at", { ascending: true })
       .limit(8),
     unassignedTickets(supabase),
-    supabase.from("conversations").select("id, channel, status, total_cost_usd").gte("started_at", since).neq("channel", "eval"),
-    supabase.from("conversation_turns").select("answer_type, first_token_ms, conversation_id, conversations!inner(channel)").gte("created_at", since).neq("conversations.channel", "eval"),
+    supabase.from("conversations").select("id, channel, status, total_cost_usd").gte("started_at", since).neq("channel", "eval").is("deleted_at", null),
+    supabase.from("conversation_turns").select("answer_type, first_token_ms, conversation_id, conversations!inner(channel)").gte("created_at", since).neq("conversations.channel", "eval").is("conversations.deleted_at", null),
   ]);
 
   const convs = conversations.data ?? [];
@@ -166,9 +168,9 @@ export default async function Overview() {
 
 /** Open, unassigned tickets that aren't already escalations (those show in Open escalations). */
 async function unassignedTickets(supabase: Awaited<ReturnType<typeof supabaseServer>>) {
-  const { data: escalated } = await supabase.from("escalations").select("ticket_id");
+  const { data: escalated } = await supabase.from("escalations").select("ticket_id").is("deleted_at", null);
   const ids = (escalated ?? []).map((e) => `"${e.ticket_id}"`).join(",");
-  let q = supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).is("assigned_to", null).eq("status", "open");
+  let q = supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).is("assigned_to", null).eq("status", "open").is("deleted_at", null);
   if (ids) q = q.not("ticket_id", "in", `(${ids})`);
   return q;
 }
