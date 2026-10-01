@@ -416,7 +416,8 @@
       "expected": "Treats a cancellation/refund request as a dispute escalation.",
       "turns": [
         "I want to cancel a payout I sent yesterday and get a refund.",
-        "I don't have the reference. I'm Amina Jacobs from CapeCloud, email amina@capecloud.example. Any time tomorrow is fine."
+        "I don't have the reference. I'm Amina Jacobs from CapeCloud, email amina@capecloud.example. Any time tomorrow is fine.",
+        "Yes, that's correct."
       ],
       "checks": [
         {
