@@ -54,20 +54,6 @@
     {
       "on": "customer.speech.timeout",
       "options": {
-        "timeoutSeconds": 5,
-        "triggerMaxCount": 1,
-        "triggerResetMode": "onUserSpeech"
-      },
-      "do": [
-        {
-          "type": "say",
-          "exact": "I can't hear you. Are you still there?"
-        }
-      ]
-    },
-    {
-      "on": "customer.speech.timeout",
-      "options": {
         "timeoutSeconds": 10,
         "triggerMaxCount": 1,
         "triggerResetMode": "onUserSpeech"
@@ -82,7 +68,21 @@
     {
       "on": "customer.speech.timeout",
       "options": {
-        "timeoutSeconds": 15,
+        "timeoutSeconds": 20,
+        "triggerMaxCount": 1,
+        "triggerResetMode": "onUserSpeech"
+      },
+      "do": [
+        {
+          "type": "say",
+          "exact": "I can't hear you. Are you still there?"
+        }
+      ]
+    },
+    {
+      "on": "customer.speech.timeout",
+      "options": {
+        "timeoutSeconds": 25,
         "triggerMaxCount": 1,
         "triggerResetMode": "onUserSpeech"
       },

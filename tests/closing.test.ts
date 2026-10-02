@@ -49,10 +49,10 @@ test("the silence hooks re-arm on speech and their last line is a phrase Vapi ha
   const assistant = JSON.parse(fs.readFileSync(path.join(ROOT, "vapi/assistant.template.json"), "utf8"));
   const hooks = (assistant.hooks as { on: string; options: { timeoutSeconds: number; triggerResetMode: string }; do: { type: string; exact?: string }[] }[])
     .filter((h) => h.on === "customer.speech.timeout");
-  assert.deepEqual(hooks.map((h) => h.options.timeoutSeconds), [5, 10, 15]);
+  assert.deepEqual(hooks.map((h) => h.options.timeoutSeconds), [10, 20, 25]);
   assert.ok(hooks.every((h) => h.options.triggerResetMode === "onUserSpeech"), "a caller who answers gets a fresh set");
   const last = hooks[hooks.length - 1].do;
   assert.ok(last.some((a) => a.type === "tool"), "the last hook ends the call");
   assert.ok(last.find((a) => a.type === "say")?.exact?.includes(END_CALL_PHRASE.replace(/\.$/, "")), "it says the goodbye phrase first");
-  assert.ok(assistant.silenceTimeoutSeconds > 15, "the plain silence timeout must not beat the hooks");
+  assert.ok(assistant.silenceTimeoutSeconds > 25, "the plain silence timeout must not beat the hooks");
 });
