@@ -176,7 +176,20 @@ export async function endConversation(
 ): Promise<boolean> {
   const { data } = await db().from("conversations").select("status, ended_at").eq("id", conversationId).single();
   if (!data || data.ended_at) return false; // already closed by the other path (webhook vs. idle sweep)
-  const status = opts.error ? "error" : data?.status === "active" ? "resolved" : data?.status;
+  // A call where the caller never said anything wasn't resolved; it was
+  // abandoned (no answer, hung up during the greeting, or the silence prompts
+  // ran out). Ticketed and escalated calls keep their status.
+  const { count: turns } = await db()
+    .from("conversation_turns")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId);
+  const status = opts.error
+    ? "error"
+    : data.status !== "active"
+      ? data.status
+      : (turns ?? 0) === 0
+        ? "abandoned"
+        : "resolved";
   const { error } = await db()
     .from("conversations")
     .update({ ended_at: new Date().toISOString(), ended_reason: opts.endedReason, summary: opts.summary, status })
