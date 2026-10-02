@@ -38,7 +38,7 @@ export default async function Home() {
             <>
               <CallerBadge
                 name={caller.name}
-                detail={caller.kind === "customer" ? `${caller.company_name ?? "customer"}, verified` : "guest"}
+                detail={caller.kind === "customer" ? `${caller.company_name ?? "customer"}, verified` : caller.company_name ? `guest from ${caller.company_name}` : "guest"}
               />
               <VoiceCall
                 publicKey={process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? ""}

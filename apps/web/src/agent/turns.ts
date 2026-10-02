@@ -92,7 +92,7 @@ export function callerContextLine(c: CallerContext): string {
     "omit user_name and user_email when you call create_escalation, and never read the email out.";
   return c.kind === "customer"
     ? `caller: ${c.name} of ${c.company_name ?? "their company"} (customer ID ${c.customer_id}), signed in before the call with their account email and customer ID, so they are already verified for that account. ${shared}`
-    : `caller: ${c.name}, a guest who signed in with a name and an email; not verified for any account. ${shared} Route as usual: escalations, disputes and refunds need no account lookup. Only if they ask about their own account's records, verify them with lookup_customer first, asking just for the company name.`;
+    : `caller: ${c.name}, a guest who signed in with a name and an email${c.company_name ? ` and says they're from ${c.company_name}` : ""}; not verified for any account. ${shared} Route as usual: escalations, disputes and refunds need no account lookup. Only if they ask about their own account's records, verify them first with lookup_customer${c.company_name ? `, passing company_name "${c.company_name}" and their name as contact_name; don't ask for either` : ", asking just for the company name"}.`;
 }
 
 /**

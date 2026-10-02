@@ -30,6 +30,7 @@ export const KnowMeRequest = z.discriminatedUnion("kind", [
     kind: z.literal("guest"),
     name: z.string().trim().min(1, "Enter your name.").max(120),
     email: z.string().trim().email("Enter a valid email address.").max(200),
+    company_name: z.string().trim().max(200).optional(),
     timezone: z.string().max(64).optional(),
   }),
 ]);
@@ -75,7 +76,7 @@ export async function createCallerSession(req: KnowMeRequest): Promise<CallerSes
       company_name: customer.company_name,
     };
   } else {
-    row = { kind: "guest", customer_id: null, name: req.name.trim(), email: req.email.trim().toLowerCase(), company_name: null };
+    row = { kind: "guest", customer_id: null, name: req.name.trim(), email: req.email.trim().toLowerCase(), company_name: req.company_name?.trim() || null };
   }
 
   const { data, error } = await db
@@ -85,6 +86,8 @@ export async function createCallerSession(req: KnowMeRequest): Promise<CallerSes
       customer_id: row.customer_id,
       name: row.name,
       email: row.email,
+      // A customer's company comes from their account; only a guest's is stored as given.
+      company_name: row.kind === "guest" ? row.company_name : null,
       timezone,
       expires_at: new Date(Date.now() + TTL_HOURS * 3_600_000).toISOString(),
     })
@@ -98,11 +101,11 @@ export async function callerSessionById(id: string | null | undefined): Promise<
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { data } = await supabaseAdmin()
     .from("caller_sessions")
-    .select("id, kind, customer_id, name, email, timezone, expires_at, customers(company_name)")
+    .select("id, kind, customer_id, name, email, timezone, expires_at, company_name, customers(company_name)")
     .eq("id", id)
     .maybeSingle();
   if (!data || new Date(data.expires_at as string) < new Date()) return null;
-  const company = (data.customers as unknown as { company_name: string } | null)?.company_name ?? null;
+  const company = (data.customers as unknown as { company_name: string } | null)?.company_name ?? (data.company_name as string | null) ?? null;
   return {
     id: data.id as string,
     kind: data.kind as "customer" | "guest",

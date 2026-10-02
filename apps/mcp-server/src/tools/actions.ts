@@ -232,10 +232,9 @@ export const createEscalation: ToolHandler<EscalationArgs> = async (args, conver
     });
   }
 
-  const followUp =
-    `A RelayPay specialist will follow up with ${userName} by email` +
-    (escalation.call_booked ? `, and will aim for the preferred callback time of ${args.preferred_time!.trim()} when they confirm the call` : "") +
-    `. The reference is ${escalation.escalation_id}.`;
+  const followUp = args.preferred_time?.trim()
+    ? `A callback with a RelayPay specialist is being booked for ${userName}. The reference is ${escalation.escalation_id}.`
+    : `The case is with a RelayPay specialist. The reference is ${escalation.escalation_id}.`;
 
   return {
     status: "success",
@@ -251,7 +250,7 @@ export const createEscalation: ToolHandler<EscalationArgs> = async (args, conver
         ? `Now, in this same reply, call book_callback with "${args.preferred_time.trim()}" as YYYY-MM-DDTHH:MM in the caller's local time to confirm the callback, and give the reference. Don't say a callback is booked until book_callback says booked. Do not promise an outcome.`
         : escalation.deduplicated
           ? "This escalation already existed; give that reference. Do not promise an outcome, a timeline, or a confirmed appointment."
-          : "Tell the caller a specialist will follow up, give the reference, and, if you haven't yet, offer a callback and ask what day and time suits them (then book it with book_callback). Stop working on the issue itself. Do not promise an outcome or a timeline.",
+          : "Give the reference and ask what day and time suits them for a callback with a specialist (then book it with book_callback). Don't say a specialist will email them; only if they don't want a callback, say a specialist will follow up by email. Stop working on the issue itself. Do not promise an outcome or a timeline.",
     },
     summary: {
       ...escalation,

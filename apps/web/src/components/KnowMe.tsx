@@ -14,6 +14,7 @@ export function KnowMe() {
   const [email, setEmail] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +28,7 @@ export function KnowMe() {
     } catch {
       timezone = undefined;
     }
-    const body = kind === "customer" ? { kind, email, customer_id: customerId, timezone } : { kind, name, email, timezone };
+    const body = kind === "customer" ? { kind, email, customer_id: customerId, timezone } : { kind, name, email, company_name: company.trim() || undefined, timezone };
     const res = await fetch("/api/caller", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
@@ -85,7 +86,11 @@ export function KnowMe() {
               Email
             </label>
             <input id="km-gemail" className="field" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} disabled={busy} />
-            <p className="hint">Used only if a specialist needs to follow up. To discuss an account, you&apos;ll be asked for its company name.</p>
+            <label htmlFor="km-company" className="label">
+              Company <span className="muted">(optional)</span>
+            </label>
+            <input id="km-company" className="field" autoComplete="organization" maxLength={200} value={company} onChange={(e) => setCompany(e.target.value)} disabled={busy} />
+            <p className="hint">Your email is used only if a specialist needs to follow up. Add your company if you want to discuss its account.</p>
           </>
         )}
         {error ? <p className="notice bad">{error}</p> : null}

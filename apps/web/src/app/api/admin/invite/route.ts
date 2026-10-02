@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { STAFF_ROLES } from "@relaypay/shared/enums";
 import { supabaseAdmin } from "@relaypay/shared/supabase";
+import { buildInviteEmail, emailConfigured, sendViaBrevo } from "@relaypay/shared/notify";
 import { requireAdmin, errorResponse } from "@/lib/auth";
+import { INVITE_DAYS, newInviteToken } from "@/lib/invites";
+import { publicOrigin } from "@/lib/public-origin";
 
 export const runtime = "nodejs";
 
@@ -12,9 +15,13 @@ const Body = z.object({
 });
 
 /**
- * Invite a support agent or admin (week 5 flow). Signup is otherwise closed.
- * The name and role go on the allowlist first: inviting creates the auth
- * user, and the signup trigger builds the profile from that row.
+ * Invite a support agent or admin. Signup is otherwise closed.
+ *
+ * The name, role and a three-day invite token go on the allowlist; the auth
+ * user is created straight away (the signup trigger builds the profile from
+ * the allowlist row). The email links to /invite/<token>, not to a Supabase
+ * link: Supabase's links expire within a day, and a mail scanner opening one
+ * uses it up. Inviting again sends a new link and ends the old one.
  */
 export async function POST(req: Request) {
   try {
@@ -32,25 +39,49 @@ export async function POST(req: Request) {
       }
     }
 
-    const { error: allowErr } = await db
-      .from("allowed_emails")
-      .upsert({ email, full_name, role, invited_by: admin.id, invited_at: new Date().toISOString() }, { onConflict: "email" });
+    const invite = newInviteToken();
+    const { error: allowErr } = await db.from("allowed_emails").upsert(
+      {
+        email,
+        full_name,
+        role,
+        invited_by: admin.id,
+        invited_at: new Date().toISOString(),
+        invite_token_hash: invite.hash,
+        invite_expires_at: invite.expiresAt.toISOString(),
+      },
+      { onConflict: "email" },
+    );
     if (allowErr) return Response.json({ error: `Could not record the invite: ${allowErr.message}` }, { status: 500 });
 
-    const redirectTo = `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/auth/confirm?next=/review`;
-    const { data, error } = await db.auth.admin.inviteUserByEmail(email, { data: { full_name }, redirectTo });
-
-    if (error && /already (been )?registered|exists/i.test(error.message)) {
-      // Invited before but never signed in: send a fresh sign-in link instead.
-      const { error: otpErr } = await db.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectTo } });
-      if (otpErr) return Response.json({ error: `Could not resend: ${otpErr.message}` }, { status: 502 });
-      if (existing) await db.from("profiles").update({ full_name, role }).eq("id", existing.id);
-      return Response.json({ note: `${full_name} was already invited, so they've been sent a fresh sign-in link.` });
+    if (existing) {
+      await db.from("profiles").update({ full_name, role }).eq("id", existing.id);
+    } else {
+      const { data, error } = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: { full_name } });
+      if (error && !/already (been )?registered|exists/i.test(error.message)) {
+        return Response.json({ error: `Could not create the account: ${error.message}` }, { status: 502 });
+      }
+      if (data?.user) await db.from("profiles").update({ full_name, role }).eq("id", data.user.id);
     }
-    if (error) return Response.json({ error: `Supabase could not send the invite: ${error.message}` }, { status: 502 });
-    if (data?.user) await db.from("profiles").update({ full_name, role }).eq("id", data.user.id);
 
-    return Response.json({ note: `Invite sent to ${full_name} (${email}) as ${role === "admin" ? "an admin" : "a support agent"}.` });
+    const link = `${publicOrigin(req)}/invite/${invite.token}`;
+    const resent = Boolean(existing);
+    if (!emailConfigured()) {
+      return Response.json({
+        note: `Email isn't set up (BREVO_API_KEY, MAIL_FROM), so send ${full_name} this link yourself. It works for ${INVITE_DAYS} days.`,
+        link,
+      });
+    }
+    const sent = await sendViaBrevo(
+      { email, name: full_name },
+      buildInviteEmail({ name: full_name, role, link, invitedBy: admin.full_name?.trim() || admin.email, expiresDays: INVITE_DAYS }),
+    );
+    if (!sent.ok) {
+      return Response.json({ note: `The email couldn't be sent (${sent.reason}). Send ${full_name} this link yourself; it works for ${INVITE_DAYS} days.`, link });
+    }
+    return Response.json({
+      note: `${resent ? "A new invite was sent" : "Invite sent"} to ${full_name} (${email}) as ${role === "admin" ? "an admin" : "a support agent"}. The link works for ${INVITE_DAYS} days.`,
+    });
   } catch (err) {
     return errorResponse(err);
   }

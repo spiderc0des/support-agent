@@ -9,7 +9,7 @@ export function InviteForm() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"support_agent" | "admin">("support_agent");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; text: string; link?: string } | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,7 +22,7 @@ export function InviteForm() {
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
-    setResult({ ok: res.ok, text: res.ok ? data.note : (data.error ?? `Failed (${res.status})`) });
+    setResult({ ok: res.ok, text: res.ok ? data.note : (data.error ?? `Failed (${res.status})`), link: data.link });
     if (res.ok) {
       setFullName("");
       setEmail("");
@@ -57,6 +57,14 @@ export function InviteForm() {
           : "Support agents can read every conversation and work tickets and escalations."}
       </p>
       {result ? <p className={`notice span-all ${result.ok ? "ok" : "bad"}`}>{result.text}</p> : null}
+      {result?.link ? (
+        <div className="inline-row span-all">
+          <input className="field" readOnly value={result.link} aria-label="Invite link" onFocus={(e) => e.currentTarget.select()} />
+          <button type="button" className="btn secondary" onClick={() => void navigator.clipboard?.writeText(result.link!).catch(() => {})}>
+            Copy
+          </button>
+        </div>
+      ) : null}
     </form>
   );
 }

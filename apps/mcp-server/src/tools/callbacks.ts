@@ -189,7 +189,7 @@ export const bookCallback: ToolHandler<Args> = async ({ time }, conversation, ct
         specialist_first_name: agent.name.split(/\s+/)[0],
         rebooked: Boolean(booking.replaced_booking_id),
         guidance:
-          "Confirm the callback: say it's booked for spoken_time with specialist_first_name from the RelayPay team, and that a calendar invite with a video link is on its way to their email. Don't read the email address out.",
+          "Confirm it: say a callback has been scheduled for spoken_time with specialist_first_name from the RelayPay team, and that a calendar invite with the link to join the call has been sent to their email. Don't read the email address out.",
       },
       summary: {
         booked: true,

@@ -128,7 +128,8 @@ ${rows.map(([k, v]) => `<tr><td style="padding:3px 16px 3px 0;color:#5b6675;vert
   return { subject, html, text };
 }
 
-async function sendViaBrevo(to: Recipient, email: BuiltEmail, env: Record<string, string | undefined>) {
+/** One email through Brevo's HTTPS API. Never throws. */
+export async function sendViaBrevo(to: Recipient, email: BuiltEmail, env: Record<string, string | undefined> = process.env) {
   try {
     const res = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
@@ -191,4 +192,26 @@ export async function notifyStaff(ev: StaffEvent, deps: NotifyDeps): Promise<Not
     console.error("[notify] could not notify the team:", err instanceof Error ? err.message : err);
     return "failed";
   }
+}
+
+export function emailConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean(env.BREVO_API_KEY && env.MAIL_FROM);
+}
+
+/** The invitation to join the support console. */
+export function buildInviteEmail(opts: { name: string; role: "admin" | "support_agent"; link: string; invitedBy: string; expiresDays: number }): BuiltEmail {
+  const role = opts.role === "admin" ? "an admin" : "a support agent";
+  const subject = "You're invited to the RelayPay support console";
+  const lead = `${opts.invitedBy} has invited you to join the RelayPay support team as ${role}.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:24px;background:#f5f6f8;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1b2430;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #dde2e8;border-radius:10px;" cellpadding="0" cellspacing="0"><tr><td style="padding:24px 28px;">
+<p style="margin:0 0 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#5b6675;">RelayPay Support</p>
+<h1 style="margin:0 0 12px;font-size:19px;line-height:1.3;color:#17365d;">Hi ${esc(opts.name)}, you're invited</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;">${esc(lead)} You'll work tickets, escalations and callbacks from the console.</p>
+<p style="margin:22px 0 0;"><a href="${esc(opts.link)}" style="display:inline-block;padding:10px 18px;background:#17365d;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Accept the invite</a></p>
+<p style="margin:18px 0 0;font-size:13px;color:#5b6675;">This link works for ${opts.expiresDays} days. After that, sign in at the console with this email address, or ask an admin to resend the invite.</p>
+</td></tr></table></td></tr></table></body></html>`;
+  const text = [subject, "", lead, "", `Accept the invite: ${opts.link}`, "", `This link works for ${opts.expiresDays} days.`].join("\n");
+  return { subject, html, text };
 }

@@ -351,7 +351,7 @@ test("scenario 7: restricted account escalation stores details, auto-ticket, and
   assert.match(res.body.escalation_id, /^ESC-\d+$/);
   assert.match(res.body.ticket_id, /^TCK-\d+$/);
   assert.equal(res.body.call_booked, true);
-  assert.match(res.body.follow_up_summary, /specialist will follow up/);
+  assert.match(res.body.follow_up_summary, /callback with a RelayPay specialist is being booked/);
   assert.doesNotMatch(res.body.follow_up_summary, /guarantee|confirmed for/i);
 
   const [e] = await s.rows("select * from escalations where conversation_id = $1");
