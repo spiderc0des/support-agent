@@ -32,7 +32,7 @@ export class PgliteStore implements Store {
   }
 
   getConversation(id: string) {
-    return this.one<ConversationState>("select id, customer_id, current_turn, status, channel from conversations where id = $1", [id]);
+    return this.one<ConversationState>("select id, customer_id, linked_customer_id, current_turn, status, channel from conversations where id = $1", [id]);
   }
 
   async ensureConversation(id: string, channel: string) {
@@ -41,6 +41,10 @@ export class PgliteStore implements Store {
 
   async setVerifiedCustomer(conversationId: string, customerId: string) {
     await this.db.query("update conversations set customer_id = $2, verified_at = now() where id = $1", [conversationId, customerId]);
+  }
+
+  async bindAccount(conversationId: string, customerId: string) {
+    return (await this.one<{ b: string | null }>("select public.bind_conversation_account($1, $2) as b", [conversationId, customerId]))?.b ?? null;
   }
 
   customerById(id: string) {

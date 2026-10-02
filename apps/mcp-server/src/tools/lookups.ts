@@ -2,9 +2,12 @@
  * lookup_customer, lookup_transaction, lookup_payout.
  *
  * Three rules apply to all of them, enforced here rather than in a prompt:
- *   1. Only a verified caller attaches an account to the conversation.
- *   2. Once an account is attached, references belonging to any other account
- *      are refused without confirming that they exist.
+ *   1. Only a verified caller attaches a verified account to the conversation.
+ *   2. One call, one account. The first record disclosed binds the call to
+ *      its account (verified or not, 0012); references belonging to any
+ *      other account are then refused without confirming that they exist.
+ *      Without this, an unverified caller could read any customer's records
+ *      by reciting references, one after another.
  *   3. Contact names, contact emails and recipient names are never returned.
  *      What the agent may say is `safe_summary`; `routing` is for deciding.
  */
@@ -26,7 +29,7 @@ async function refuseOtherAccount(
     conversation_id: conversation.id,
     turn_index: conversation.current_turn,
     event_type: "ownership_blocked",
-    summary: `Refused ${what} ${reference}: it belongs to a different account than the one verified on this call`,
+    summary: `Refused ${what} ${reference}: it belongs to a different account than the one this call is about`,
     metadata: { reference },
     source: "system",
   });
@@ -40,6 +43,16 @@ async function refuseOtherAccount(
     },
     error: `${reference} belongs to another customer`,
   };
+}
+
+/**
+ * Bind the call to the record's account, or refuse if it is bound to another.
+ * The bind is atomic in the database, so parallel lookups can't each claim a
+ * different account.
+ */
+async function holdToOneAccount(ctx: ToolContext, conversation: ConversationState, owner: string, what: string, reference: string) {
+  const bound = await ctx.store.bindAccount(conversation.id, owner);
+  return bound && bound !== owner ? refuseOtherAccount(ctx, conversation, what, reference) : null;
 }
 
 // ------------------------------------------------------ lookup_customer -----
@@ -107,7 +120,8 @@ export const lookupCustomer: ToolHandler<CustomerArgs> = async (args, conversati
   const verified =
     matchedBy === "customer_id" || matchedBy === "email" || (matchedBy === "company" && (nameMatches || emailMatches));
 
-  if (conversation.customer_id && conversation.customer_id !== customer.customer_id) {
+  const callAccount = conversation.customer_id ?? conversation.linked_customer_id;
+  if (callAccount && callAccount !== customer.customer_id) {
     return refuseOtherAccount(ctx, conversation, "account lookup for", customer.customer_id);
   }
 
@@ -206,9 +220,8 @@ export const lookupTransaction: ToolHandler<TransactionArgs> = async ({ transact
       error: `no transaction ${ref}`,
     };
   }
-  if (conversation.customer_id && conversation.customer_id !== txn.customer_id) {
-    return refuseOtherAccount(ctx, conversation, "transaction", ref);
-  }
+  const refused = await holdToOneAccount(ctx, conversation, txn.customer_id, "transaction", ref);
+  if (refused) return refused;
 
   const payout = await ctx.store.payoutByTransaction(ref);
   const { safe_summary, routing } = transactionSummary(txn);
@@ -261,9 +274,8 @@ export const lookupPayout: ToolHandler<PayoutArgs> = async (args, conversation, 
       error: `no payout for ${ref}`,
     };
   }
-  if (conversation.customer_id && conversation.customer_id !== payout.customer_id) {
-    return refuseOtherAccount(ctx, conversation, "payout", ref);
-  }
+  const refused = await holdToOneAccount(ctx, conversation, payout.customer_id, "payout", ref);
+  if (refused) return refused;
 
   const { safe_summary, routing } = payoutSummary(payout);
   return {

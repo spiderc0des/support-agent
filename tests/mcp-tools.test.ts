@@ -201,11 +201,52 @@ test("a verified caller cannot read another customer's transaction, and the atte
   assert.equal(calls[0].status, "denied");
 });
 
-test("failed transaction suggests a ticket; review-required suggests a human", async () => {
+test("an unverified caller can't walk through other accounts' records by reference (fc229aa7)", async () => {
   const s = await session();
-  const failed = await s.call("lookup_transaction", { transaction_id: "TXN-9004" });
+  // "I'm Amina Jacobs" and never verified: her own transaction first...
+  const own = await s.call("lookup_transaction", { transaction_id: "TXN 9 0 0 4" });
+  assert.equal(own.body.status, "failed");
+  // ...then KigaliWorks', NairobiOps' and AccraStack's records, refused.
+  for (const [tool, args] of [
+    ["lookup_transaction", { transaction_id: "TXN-9005" }],
+    ["lookup_transaction", { transaction_id: "9 0 0 2" }],
+    ["lookup_payout", { payout_id: "PAY-7002" }],
+    ["lookup_customer", { company_name: "KigaliWorks", contact_name: "Patrick" }],
+  ] as const) {
+    const res = await s.call(tool, args);
+    assert.equal(res.body.found, false, `${tool} ${JSON.stringify(args)} should be refused`);
+    assert.equal(res.body.status, undefined);
+    assert.match(res.body.safe_summary, /not able to share/);
+  }
+  // Her own payout on the same call still works.
+  const payout = await s.call("lookup_payout", { payout_id: "PAY-7003" });
+  assert.equal(payout.body.found, true);
+  const [conv] = await s.rows("select customer_id, linked_customer_id, verified_at from conversations where id = $1");
+  assert.deepEqual([conv.customer_id, conv.linked_customer_id, conv.verified_at], [null, "CUS-1004", null], "bound, not verified");
+  const blocked = await s.rows("select count(*)::int as n from conversation_events where conversation_id = $1 and event_type = 'ownership_blocked'");
+  assert.equal(blocked[0].n, 4);
+});
+
+test("parallel lookups on one call can't bind two accounts", async () => {
+  const s = await session();
+  const results = await Promise.all(["TXN-9001", "TXN-9005"].map((t) => s.call("lookup_transaction", { transaction_id: t })));
+  assert.equal(results.filter((r) => r.body.found === true).length, 1);
+});
+
+test("a caller bound by reference can still verify as that account", async () => {
+  const s = await session();
+  await s.call("lookup_transaction", { transaction_id: "TXN-9001" });
+  const res = await s.call("lookup_customer", { company_name: "LagosLedger", contact_name: "Amara" });
+  assert.equal(res.body.verified, true);
+  const [conv] = await s.rows("select customer_id, verified_at from conversations where id = $1");
+  assert.equal(conv.customer_id, "CUS-1001");
+  assert.ok(conv.verified_at);
+});
+
+test("failed transaction suggests a ticket; review-required suggests a human", async () => {
+  const failed = await (await session()).call("lookup_transaction", { transaction_id: "TXN-9004" });
   assert.equal(failed.body.routing.suggest_ticket, true);
-  const review = await s.call("lookup_transaction", { transaction_id: "TXN-9003" });
+  const review = await (await session()).call("lookup_transaction", { transaction_id: "TXN-9003" });
   assert.equal(review.body.routing.requires_human, true);
   assert.equal(review.body.routing.suggested_category, "compliance");
 });

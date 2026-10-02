@@ -16,7 +16,10 @@ export type FullPayout = PayoutRow & { amount: number; currency: string; recipie
 
 export type ConversationState = {
   id: string;
+  /** The verified account (lookup_customer verified the caller). */
   customer_id: string | null;
+  /** The account the call is bound to by an earlier lookup, before or without verification (0012). */
+  linked_customer_id: string | null;
   current_turn: number;
   status: string;
   channel: string;
@@ -98,6 +101,8 @@ export interface Store {
   /** For stdio / Inspector sessions that have no orchestrator creating the row. */
   ensureConversation(id: string, channel: string): Promise<void>;
   setVerifiedCustomer(conversationId: string, customerId: string): Promise<void>;
+  /** Bind the call to this account unless already bound; returns the account it is bound to. */
+  bindAccount(conversationId: string, customerId: string): Promise<string | null>;
 
   customerById(id: string): Promise<FullCustomer | null>;
   customerByEmail(email: string): Promise<FullCustomer | null>;
@@ -142,7 +147,7 @@ export class SupabaseStore implements Store {
   async getConversation(id: string) {
     const { data, error } = await this.db
       .from("conversations")
-      .select("id, customer_id, current_turn, status, channel")
+      .select("id, customer_id, linked_customer_id, current_turn, status, channel")
       .eq("id", id)
       .maybeSingle();
     check(error, "read conversation");
@@ -162,6 +167,12 @@ export class SupabaseStore implements Store {
       .update({ customer_id: customerId, verified_at: new Date().toISOString() })
       .eq("id", conversationId);
     check(error, "attach verified customer");
+  }
+
+  async bindAccount(conversationId: string, customerId: string) {
+    const { data, error } = await this.db.rpc("bind_conversation_account", { p_conversation: conversationId, p_customer: customerId });
+    check(error, "bind call to account");
+    return (data as string | null) ?? null;
   }
 
   async customerById(id: string) {

@@ -36,19 +36,20 @@ async function resolveLinks(
   if (raw.transaction_id && !txn) notes.push(`transaction "${raw.transaction_id}" not found; not linked`);
   if (raw.payout_id && !payout) notes.push(`payout "${raw.payout_id}" not found; not linked`);
 
-  let customerId = conversation.customer_id;
+  const callAccount = conversation.customer_id ?? conversation.linked_customer_id;
+  let customerId = callAccount;
   if (!customerId && raw.customer_id) {
     const ref = normalizeReference("CUS", raw.customer_id);
     const customer = ref ? await ctx.store.customerById(ref) : null;
     if (customer) customerId = customer.customer_id;
     else notes.push(`customer "${raw.customer_id}" not found; not linked`);
   } else if (customerId && raw.customer_id && normalizeReference("CUS", raw.customer_id) !== customerId) {
-    notes.push(`model named ${raw.customer_id}; filed against the verified account instead`);
+    notes.push(`model named ${raw.customer_id}; filed against this call's account instead`);
   }
   customerId = customerId ?? txn?.customer_id ?? payout?.customer_id ?? null;
 
-  // Never link another account's records to this call's verified account.
-  const own = (owner: string | undefined) => !conversation.customer_id || owner === conversation.customer_id;
+  // Never link another account's records to this call's account.
+  const own = (owner: string | undefined) => !callAccount || owner === callAccount;
   return {
     customerId,
     transactionId: txn && own(txn.customer_id) ? txn.transaction_id : null,
