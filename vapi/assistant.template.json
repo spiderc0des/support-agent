@@ -44,10 +44,60 @@
     "end-of-call-report",
     "user-interrupted"
   ],
-  "silenceTimeoutSeconds": 30,
+  "silenceTimeoutSeconds": 45,
   "maxDurationSeconds": 900,
   "backgroundSound": "off",
   "endCallPhrases": [
     "goodbye from relaypay"
+  ],
+  "hooks": [
+    {
+      "on": "customer.speech.timeout",
+      "options": {
+        "timeoutSeconds": 5,
+        "triggerMaxCount": 1,
+        "triggerResetMode": "onUserSpeech"
+      },
+      "do": [
+        {
+          "type": "say",
+          "exact": "I can't hear you. Are you still there?"
+        }
+      ]
+    },
+    {
+      "on": "customer.speech.timeout",
+      "options": {
+        "timeoutSeconds": 10,
+        "triggerMaxCount": 1,
+        "triggerResetMode": "onUserSpeech"
+      },
+      "do": [
+        {
+          "type": "say",
+          "exact": "I can't hear you. Are you still there?"
+        }
+      ]
+    },
+    {
+      "on": "customer.speech.timeout",
+      "options": {
+        "timeoutSeconds": 15,
+        "triggerMaxCount": 1,
+        "triggerResetMode": "onUserSpeech"
+      },
+      "do": [
+        {
+          "type": "say",
+          "exact": "I still can't hear anything, so I'll end the call now. Goodbye from RelayPay."
+        },
+        {
+          "type": "tool",
+          "tool": {
+            "type": "endCall"
+          }
+        }
+      ]
+    }
   ]
 }
