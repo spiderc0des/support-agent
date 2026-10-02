@@ -25,6 +25,15 @@ requireEnv("APP_URL", "VAPI_WEBHOOK_SECRET", ...(dryRun ? [] : ["VAPI_PRIVATE_KE
 const API = "https://api.vapi.ai";
 const appUrl = process.env.APP_URL!.replace(/\/$/, "");
 if (!/^https:\/\//.test(appUrl)) throw new Error(`APP_URL must be a public https origin Vapi can reach; got ${appUrl}`);
+// There is one assistant, shared by local testing and production. Pointing it
+// at a tunnel takes every real call there, so that needs saying on purpose.
+if (/ngrok|localhost|127\.0\.0\.1|\.local\b/i.test(appUrl) && !process.argv.includes("--dev") && !dryRun) {
+  throw new Error(
+    `APP_URL is a development address (${appUrl}). Syncing would send every live call there. ` +
+      `For production run: APP_URL=https://<your-app>.up.railway.app npm run vapi:sync. ` +
+      `To point the assistant at your tunnel on purpose, add --dev.`,
+  );
+}
 
 const template = fs.readFileSync(path.join(ROOT, "vapi/assistant.template.json"), "utf8");
 const rendered = template.replace(/\$\{(APP_URL|VAPI_WEBHOOK_SECRET)\}/g, (_m, name: string) =>
@@ -50,14 +59,24 @@ async function vapi(method: string, route: string, body?: unknown) {
   return text ? JSON.parse(text) : null;
 }
 
-// Custom LLM credential: Vapi sends its apiKey as "Authorization: Bearer ..." to our endpoint.
-const credentials = (await vapi("GET", "/credential")) as { id: string; provider: string }[];
-if (!credentials.some((c) => c.provider === "custom-llm")) {
-  await vapi("POST", "/credential", { provider: "custom-llm", apiKey: process.env.VAPI_WEBHOOK_SECRET });
-  console.log("created custom-llm credential");
-} else {
-  console.log("custom-llm credential already exists (update it in the dashboard if the secret changed)");
+// Custom LLM credential: Vapi sends its apiKey as "Authorization: Bearer ..."
+// to our endpoint. It is named and attached to the assistant explicitly: in a
+// shared Vapi organisation other people's custom-llm credentials exist too,
+// and an unattached assistant would send one of theirs (our endpoint then
+// refuses it: pipeline-error-custom-llm-401-unauthorized after the greeting).
+// The secret can't be read back from Vapi, so ours is recreated on each sync.
+const CREDENTIAL_NAME = "relaypay-support-webhook";
+const credentials = (await vapi("GET", "/credential")) as { id: string; provider: string; name?: string | null }[];
+for (const old of credentials.filter((c) => c.provider === "custom-llm" && c.name === CREDENTIAL_NAME)) {
+  await vapi("DELETE", `/credential/${old.id}`).catch(() => {});
 }
+const credential = (await vapi("POST", "/credential", {
+  provider: "custom-llm",
+  name: CREDENTIAL_NAME,
+  apiKey: process.env.VAPI_WEBHOOK_SECRET,
+})) as { id: string };
+assistant.credentialIds = [credential.id];
+console.log(`custom-llm credential ${CREDENTIAL_NAME} (${credential.id.slice(0, 8)}…) attached to the assistant`);
 
 const existingId = process.env.VAPI_ASSISTANT_ID;
 const saved = existingId

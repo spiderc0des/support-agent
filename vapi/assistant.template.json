@@ -39,6 +39,15 @@
       "x-vapi-secret": "${VAPI_WEBHOOK_SECRET}"
     }
   },
+  "clientMessages": [
+    "transcript",
+    "speech-update",
+    "status-update",
+    "conversation-update",
+    "model-output",
+    "user-interrupted",
+    "hang"
+  ],
   "serverMessages": [
     "status-update",
     "end-of-call-report",

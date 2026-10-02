@@ -329,3 +329,8 @@ a.tile:hover { border-color: var(--brand); }
 .day.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
 .day:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
 .hours { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+/* ---- Caption toggle (voice page) ---- */
+.captions-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 4px; }
+.captions-head + .captions { border-top: 0; padding-top: 10px; }
+.caption-empty { margin: 0 0 8px; font-size: 14px; }

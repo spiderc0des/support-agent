@@ -29,6 +29,14 @@ const LABEL: Record<CallState, string> = {
   error: "Something went wrong",
 };
 
+/**
+ * What the page needs Vapi to send it. Asked for on every call as well as in
+ * the assistant config: captions come only from "transcript" messages, and a
+ * call started with overrides must not fall back to a list without them.
+ */
+const CLIENT_MESSAGES = ["transcript", "speech-update", "status-update", "conversation-update", "model-output", "user-interrupted", "hang"];
+const CAPTIONS_KEY = "relaypay.captions";
+
 /** After the call connects, the greeting normally starts within a second; stop ringing regardless after this. */
 const RING_AFTER_CONNECT_MS = 4000;
 
@@ -58,6 +66,25 @@ export function VoiceCall({ publicKey, assistantId, caller }: { publicKey: strin
     initialCaptions,
   );
   const [error, setError] = useState<string | null>(null);
+  // Captions on by default; the caller's choice is remembered on this browser.
+  const [showCaptions, setShowCaptions] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(CAPTIONS_KEY) === "off") setShowCaptions(false);
+    } catch {
+      /* storage blocked: keep the default */
+    }
+  }, []);
+  const toggleCaptions = useCallback(() => {
+    setShowCaptions((on) => {
+      try {
+        localStorage.setItem(CAPTIONS_KEY, on ? "off" : "on");
+      } catch {
+        /* storage blocked: the choice lasts for this page only */
+      }
+      return !on;
+    });
+  }, []);
   // Call timer: counts from the moment the call connects, freezes when it ends.
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
   const [endedAt, setEndedAt] = useState<number | null>(null);
@@ -187,15 +214,17 @@ export function VoiceCall({ publicKey, assistantId, caller }: { publicKey: strin
     try {
       // A caller who signed in ("Know me") is greeted by name, and the call
       // carries their session so the agent never asks who they are.
-      const call = await vapi.start(
-        assistantId,
-        caller
+      // The SDK types clientMessages as a single value; the API takes a list.
+      const overrides = {
+        clientMessages: CLIENT_MESSAGES,
+        ...(caller
           ? {
               firstMessage: `Hi ${caller.firstName}, you've reached RelayPay support. How can I help you today?`,
               metadata: { callerSessionId: caller.sessionId },
             }
-          : undefined,
-      );
+          : {}),
+      } as unknown as Parameters<Vapi["start"]>[1];
+      const call = await vapi.start(assistantId, overrides);
       if (caller && call?.id) {
         void fetch("/api/caller/attach", {
           method: "POST",
@@ -291,7 +320,16 @@ export function VoiceCall({ publicKey, assistantId, caller }: { publicKey: strin
         )}
       </div>
 
-      <div className="captions">
+      <div className="captions-head">
+        <span className="muted">Captions</span>
+        <button type="button" className="linklike" aria-pressed={showCaptions} aria-controls="call-captions" onClick={toggleCaptions}>
+          {showCaptions ? "Hide captions" : "Show captions"}
+        </button>
+      </div>
+      <div className="captions" id="call-captions" hidden={!showCaptions}>
+        {!captions.user.finals && !captions.user.partial && !captions.agent.finals && !captions.agent.partial ? (
+          <p className="caption-empty muted">{inCall ? "Captions appear here as you and the assistant speak." : "Captions of the call appear here."}</p>
+        ) : null}
         <Caption who="You" line={captions.user} />
         {/* Only the agent's line is announced to screen readers; the caller knows what they said. */}
         <div aria-live="polite">
