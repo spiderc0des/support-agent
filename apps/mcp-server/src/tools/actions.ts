@@ -141,8 +141,13 @@ export const createSupportTicket: ToolHandler<TicketArgs> = async (args, convers
 // ---------------------------------------------------- create_escalation -----
 
 export const createEscalationShape = {
-  user_name: z.string().min(1).max(120).describe("The caller's name, as they gave it."),
-  user_email: z.string().min(3).max(200).describe("The caller's email as they spelled it; spoken forms like 'amara at lagosledger dot example' are fine."),
+  user_name: z.string().min(1).max(120).optional().describe("The caller's name, as they gave it. Omit when the call context says the server has it."),
+  user_email: z
+    .string()
+    .min(3)
+    .max(200)
+    .optional()
+    .describe("The caller's email as they spelled it; spoken forms like 'amara at lagosledger dot example' are fine. Omit when the call context says the server has it."),
   category: EscalationCategory.describe(
     "account: restriction, suspension, access. compliance: verification or review. dispute: dispute, refund, cancellation. payment: failed or delayed money needing a person. other: anything else.",
   ),
@@ -155,8 +160,8 @@ export const createEscalationShape = {
   payout_id: z.string().max(80).optional(),
 };
 type EscalationArgs = {
-  user_name: string;
-  user_email: string;
+  user_name?: string;
+  user_email?: string;
   category: z.infer<typeof EscalationCategory>;
   reason: string;
   preferred_time?: string;
@@ -168,12 +173,25 @@ type EscalationArgs = {
 };
 
 export const createEscalation: ToolHandler<EscalationArgs> = async (args, conversation, ctx) => {
-  const email = normalizeEmail(args.user_email);
+  // A caller who signed in on the voice page gave their name and email
+  // there; the server holds them, so the agent never asks or spells them.
+  const userName = (args.user_name?.trim() || conversation.caller_name?.trim() || "").trim();
+  const rawEmail = args.user_email ?? conversation.caller_email ?? undefined;
+  if (!userName || !rawEmail) {
+    return {
+      status: "invalid_input",
+      result: {
+        error: `This caller didn't sign in before the call, so the server doesn't have their ${!userName && !rawEmail ? "name and email" : !userName ? "name" : "email"}. If they already said it on this call, call create_escalation again now passing user_name and user_email as they gave them; otherwise ask for what's missing.`,
+      },
+      error: "missing caller name or email",
+    };
+  }
+  const email = normalizeEmail(rawEmail);
   if (!email || !isPlausibleEmail(email)) {
     return {
       status: "invalid_input",
       result: {
-        error: `"${args.user_email}" doesn't look like a complete email address. Ask the caller to spell it again, then read it back once.`,
+        error: `"${rawEmail}" doesn't look like a complete email address. Ask the caller to spell it again, then read it back once.`,
       },
       error: "implausible email",
     };
@@ -183,7 +201,7 @@ export const createEscalation: ToolHandler<EscalationArgs> = async (args, conver
   const ticketId = args.ticket_id?.toUpperCase().replace(/\s+/g, "") ?? null;
   const escalation = await ctx.store.createEscalation({
     conversationId: conversation.id,
-    userName: args.user_name.trim(),
+    userName,
     userEmail: email,
     category: args.category,
     reason: args.reason.trim(),
@@ -206,7 +224,7 @@ export const createEscalation: ToolHandler<EscalationArgs> = async (args, conver
       category: args.category,
       priority: args.priority ?? "high",
       reason: args.reason.trim(),
-      callerName: args.user_name.trim(),
+      callerName: userName,
       callerEmail: email,
       contactMatchesRecord: escalation.contact_matches_record,
       preferredTime: args.preferred_time?.trim() || null,
@@ -215,7 +233,7 @@ export const createEscalation: ToolHandler<EscalationArgs> = async (args, conver
   }
 
   const followUp =
-    `A RelayPay specialist will follow up with ${args.user_name.trim()} by email` +
+    `A RelayPay specialist will follow up with ${userName} by email` +
     (escalation.call_booked ? `, and will aim for the preferred callback time of ${args.preferred_time!.trim()} when they confirm the call` : "") +
     `. The reference is ${escalation.escalation_id}.`;
 
@@ -229,8 +247,11 @@ export const createEscalation: ToolHandler<EscalationArgs> = async (args, conver
       deduplicated: escalation.deduplicated,
       follow_up_summary: followUp,
       spoken_reference: spokenReference(escalation.escalation_id),
-      guidance:
-        "Tell the caller a specialist will follow up, give the reference, and stop working on this issue. Do not promise an outcome, a timeline, or a confirmed appointment.",
+      guidance: args.preferred_time?.trim()
+        ? `Now, in this same reply, call book_callback with "${args.preferred_time.trim()}" as YYYY-MM-DDTHH:MM in the caller's local time to confirm the callback, and give the reference. Don't say a callback is booked until book_callback says booked. Do not promise an outcome.`
+        : escalation.deduplicated
+          ? "This escalation already existed; give that reference. Do not promise an outcome, a timeline, or a confirmed appointment."
+          : "Tell the caller a specialist will follow up, give the reference, and, if you haven't yet, offer a callback and ask what day and time suits them (then book it with book_callback). Stop working on the issue itself. Do not promise an outcome or a timeline.",
     },
     summary: {
       ...escalation,

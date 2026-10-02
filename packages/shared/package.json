@@ -10,6 +10,8 @@
     "./kb": "./src/kb.ts",
     "./csv": "./src/csv.ts",
     "./notify": "./src/notify.ts",
+    "./slots": "./src/slots.ts",
+    "./google-calendar": "./src/google-calendar.ts",
     "./env": "./src/env.ts"
   },
   "dependencies": {

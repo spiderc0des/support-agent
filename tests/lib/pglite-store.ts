@@ -19,6 +19,7 @@ import type {
   TicketResult,
   ToolCallRow,
 } from "../../apps/mcp-server/src/store.ts";
+import type { BookedSlot, BookSlotResult, CallbackAgent, CallEscalation } from "../../apps/mcp-server/src/store.ts";
 import type { NotificationRow } from "../../packages/shared/src/notify.ts";
 
 const dateOnly = (v: unknown) => (v instanceof Date ? v.toISOString().slice(0, 10) : (v as string | null));
@@ -32,7 +33,7 @@ export class PgliteStore implements Store {
   }
 
   getConversation(id: string) {
-    return this.one<ConversationState>("select id, customer_id, linked_customer_id, current_turn, status, channel from conversations where id = $1", [id]);
+    return this.one<ConversationState>("select id, customer_id, linked_customer_id, caller_name, caller_email, caller_timezone, current_turn, status, channel from conversations where id = $1", [id]);
   }
 
   async ensureConversation(id: string, channel: string) {
@@ -143,4 +144,62 @@ export class PgliteStore implements Store {
       [r.kind, r.ticket_id, r.escalation_id, r.conversation_id, r.subject, r.recipients, r.status, r.detail],
     );
   }
+
+  escalationForConversation(conversationId: string) {
+    return this.one<CallEscalation>(
+      `select e.escalation_id, e.ticket_id, e.user_name, e.user_email, e.category, e.reason, e.customer_id, c.company_name
+         from escalations e left join customers c on c.customer_id = e.customer_id
+        where e.conversation_id = $1 and e.status <> 'closed' and e.deleted_at is null
+        order by e.created_at desc limit 1`,
+      [conversationId],
+    );
+  }
+
+  async callbackAgents() {
+    const { rows } = await this.db.query<CallbackAgent & { work_start: string; work_end: string }>(
+      `select a.profile_id, coalesce(nullif(trim(p.full_name), ''), split_part(p.email, '@', 1)) as name, a.rank, a.timezone, a.work_days,
+              a.work_start::text as work_start, a.work_end::text as work_end,
+              exists (select 1 from staff_calendars s where s.profile_id = a.profile_id) as has_calendar
+         from callback_agents a join profiles p on p.id = a.profile_id
+        where a.takes_callbacks and p.role in ('admin', 'support_agent')
+        order by a.rank`,
+    );
+    return rows;
+  }
+
+  async bookedSlots(from: Date, to: Date) {
+    const { rows } = await this.db.query<{ profile_id: string; slot_start: Date }>(
+      "select profile_id, slot_start from callback_bookings where status = 'booked' and slot_start >= $1 and slot_start < $2",
+      [from.toISOString(), to.toISOString()],
+    );
+    return rows.map((r): BookedSlot => ({ profile_id: r.profile_id, slot_start: new Date(r.slot_start).toISOString() }));
+  }
+
+  async bookSlot(i: { escalationId: string; profileId: string; start: Date; end: Date; timezone: string; label: string }) {
+    const row = await this.one<BookSlotResult>("select * from book_callback_slot($1,$2,$3,$4,$5,$6)", [
+      i.escalationId, i.profileId, i.start.toISOString(), i.end.toISOString(), i.timezone, i.label,
+    ]);
+    return row ?? { booking_id: null, replaced_booking_id: null, replaced_profile_id: null, replaced_event_id: null };
+  }
+
+  async releaseBooking(bookingId: string) {
+    await this.db.query("update callback_bookings set status = 'cancelled', cancelled_at = now() where id = $1", [bookingId]);
+  }
+
+  async setBookingEvent(bookingId: string, eventId: string, link: string | null) {
+    await this.db.query("update callback_bookings set google_event_id = $2, google_event_link = $3 where id = $1", [bookingId, eventId, link]);
+  }
+
+  async recordPreferredTime(escalationId: string, label: string) {
+    await this.db.query("update escalations set call_booked = true, preferred_time_text = $2, updated_at = now() where escalation_id = $1 and callback_at is null", [escalationId, label]);
+  }
+
+  async calendarToken(profileId: string) {
+    return (await this.one<{ refresh_token: string }>("select refresh_token from staff_calendars where profile_id = $1", [profileId]))?.refresh_token ?? null;
+  }
+
+  async recordCalendarError(profileId: string, message: string) {
+    await this.db.query("update staff_calendars set last_error = $2, last_error_at = now() where profile_id = $1", [profileId, message]);
+  }
+
 }

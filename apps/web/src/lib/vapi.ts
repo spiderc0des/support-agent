@@ -15,7 +15,15 @@ export type VapiCall = {
   id?: string;
   type?: string; // "webCall" | "inboundPhoneCall" | "outboundPhoneCall"
   customer?: { number?: string | null } | null;
+  metadata?: Record<string, unknown> | null;
+  assistantOverrides?: { metadata?: Record<string, unknown> | null } | null;
 };
+
+/** The "Know me" session the voice page passed when it started the call, if Vapi forwards it. */
+export function callerSessionIdOf(call: VapiCall | undefined): string | null {
+  const v = call?.assistantOverrides?.metadata?.callerSessionId ?? call?.metadata?.callerSessionId;
+  return typeof v === "string" ? v : null;
+}
 
 export type VapiChatRequest = {
   model?: string;

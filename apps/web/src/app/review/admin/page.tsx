@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@relaypay/shared/supabase";
 import { DeleteControl } from "@/components/DeleteControl";
 import { InviteForm } from "@/components/InviteForm";
+import { CallbackRota, type RotaRow } from "@/components/CallbackRota";
+import { calendarConfigured } from "@relaypay/shared/google-calendar";
 import { TeamTable, type TeamMember } from "@/components/TeamTable";
 import { When } from "@/components/When";
 import { activeSessionCount } from "@/agent/turns";
@@ -40,9 +42,11 @@ export default async function AdminPage() {
     db.from("eval_runs").select("id, model, started_at, passed, total, cost_usd").is("deleted_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
     mcpHealthy(),
   ]);
-  const [{ data: kbLive }, { count: kbChunks }] = await Promise.all([
+  const [{ data: kbLive }, { count: kbChunks }, { data: rotaRows }, { data: calendars }] = await Promise.all([
     db.from("kb_versions").select("version, published_at, recall").order("version", { ascending: false }).limit(1).maybeSingle(),
     db.from("kb_chunks").select("id", { count: "exact", head: true }),
+    db.from("callback_agents").select("*").order("rank"),
+    db.from("staff_calendars").select("profile_id, last_error"),
   ]);
 
   // Recently deleted, across every kind that can be deleted.
@@ -85,6 +89,25 @@ export default async function AdminPage() {
     open_cases: openBy.get(p.id) ?? 0,
   }));
 
+  // The rota: everyone on it in order, then staff not on it yet (off by default).
+  const calOf = new Map((calendars ?? []).map((c) => [c.profile_id as string, c.last_error ? "error" : "connected"] as const));
+  const staffById = new Map((profiles ?? []).filter((p) => p.role === "admin" || p.role === "support_agent").map((p) => [p.id as string, p]));
+  const toRow = (p: { id: string; full_name: string | null; email: string }, a?: Record<string, unknown>): RotaRow => ({
+    profile_id: p.id,
+    name: p.full_name?.trim() || p.email.split("@")[0],
+    email: p.email,
+    calendar: calOf.get(p.id) ?? "none",
+    takes_callbacks: a ? Boolean(a.takes_callbacks) : false,
+    timezone: (a?.timezone as string) ?? "Africa/Lagos",
+    work_days: (a?.work_days as number[]) ?? [1, 2, 3, 4, 5],
+    work_start: String(a?.work_start ?? "09:00").slice(0, 5),
+    work_end: String(a?.work_end ?? "17:00").slice(0, 5),
+  });
+  const rota: RotaRow[] = [
+    ...(rotaRows ?? []).filter((a) => staffById.has(a.profile_id)).map((a) => toRow(staffById.get(a.profile_id)!, a)),
+    ...[...staffById.values()].filter((p) => !(rotaRows ?? []).some((a) => a.profile_id === p.id)).map((p) => toRow(p)),
+  ];
+
   const set = (v: string | undefined) => (v ? <span className="pill done">set</span> : <span className="pill attention">missing</span>);
 
   return (
@@ -109,6 +132,18 @@ export default async function AdminPage() {
           )}{" "}
           {kbChunks ?? 0} chunks the agent can search.
         </p>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Callback order</h2>
+          <span className="muted">{calendarConfigured() ? "booked on Google Calendar" : "Google Calendar not configured"}</span>
+        </div>
+        <p className="muted">
+          When a caller asks for a callback, the assistant tries these people from the top: the first who works then, is free on their calendar
+          and isn&apos;t already booked gets the callback, and the ticket and escalation are assigned to them.
+        </p>
+        <CallbackRota initial={rota} />
       </section>
 
       <section className="panel">

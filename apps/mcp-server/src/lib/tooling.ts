@@ -10,11 +10,16 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolCallStatus } from "@relaypay/shared/enums";
 import type { ConversationState, Store } from "../store.ts";
+import type { CalendarPort } from "./calendar.ts";
 
 export type ToolContext = {
   store: Store;
   /** From the X-Conversation-Id header (HTTP) or the environment (stdio). Never from the model. */
   conversationId: string | null;
+  /** Staff calendars for callback booking. Omitted: Google, if configured. Null: no calendars. */
+  calendar?: CalendarPort | null;
+  /** The clock, injectable for tests. */
+  now?: () => Date;
 };
 
 export type ToolOutcome = {

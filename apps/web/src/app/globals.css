@@ -300,3 +300,32 @@ a.tile:hover { border-color: var(--brand); }
 .kb-h3 { font-size: 14px; margin: 4px 0 0; }
 .kb-misses { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 960px) { .kb-layout { grid-template-columns: 1fr; } .kb-text { min-height: 45vh; } }
+
+/* ---- Know me (voice page sign-in) ---- */
+.know-me h2 { font-size: 18px; margin: 0 0 4px; color: var(--brand); }
+.know-me > .muted { margin: 0 0 16px; }
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 18px; }
+.segmented button { border: 0; background: transparent; padding: 9px 10px; border-radius: calc(var(--radius) - 3px); font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.segmented button.on { background: var(--surface); color: var(--brand); box-shadow: 0 1px 2px rgba(23, 54, 93, .12); }
+.know-me-form { align-items: stretch; }
+.know-me-form .btn { align-self: flex-start; }
+.know-me-form .hint { margin-top: -6px; }
+.caller-badge { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; padding: 10px 12px; margin-bottom: 18px; background: var(--brand-soft); border-radius: var(--radius); font-size: 15px; }
+.plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+/* ---- Callback rota (admin) ---- */
+.table-wrap { overflow-x: auto; }
+.rota td { vertical-align: middle; }
+.rota tr.off td { color: var(--muted); }
+.rota .pill { margin-top: 4px; display: inline-block; }
+.rota-order { white-space: nowrap; }
+.rota-order .num { display: inline-block; min-width: 18px; font-weight: 600; color: var(--brand); text-align: left; }
+.rota-move { display: inline-flex; gap: 4px; margin-left: 6px; }
+.rota-move .btn { padding: 2px 8px; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.day-picks { display: flex; flex-wrap: wrap; gap: 4px; min-width: 220px; }
+.day { display: inline-flex; align-items: center; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; cursor: pointer; color: var(--muted); }
+.day input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.day.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.day:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hours { display: flex; align-items: center; gap: 6px; white-space: nowrap; }

@@ -6,6 +6,7 @@
  * on a call. This file owns the session-per-conversation map, barge-in, the
  * per-turn log row, and the fallback when the agent cannot finish.
  */
+import { nowInZone, resolveCallerTimeZone } from "@relaypay/shared/slots";
 import type { AnswerPath, Channel } from "@relaypay/shared/enums";
 import { emailsSpokenBy } from "./speech-filter.ts";
 import { END_CALL_PHRASE, callerIsLeaving, endCallSuffix } from "./closing.ts";
@@ -75,14 +76,35 @@ export function sessionFor(conversationId: string, channel: Channel): SupportSes
   return s;
 }
 
+export type CallerContext = {
+  kind: "customer" | "guest";
+  name: string;
+  customer_id: string | null;
+  company_name: string | null;
+  timezone: string | null;
+};
+
+/** What the agent is told about a caller who signed in on the voice page ("Know me"). */
+export function callerContextLine(c: CallerContext): string {
+  const first = c.name.trim().split(/\s+/)[0];
+  const shared =
+    `Address them as ${first}. The server already has their name and email: never ask for either, ` +
+    "omit user_name and user_email when you call create_escalation, and never read the email out.";
+  return c.kind === "customer"
+    ? `caller: ${c.name} of ${c.company_name ?? "their company"} (customer ID ${c.customer_id}), signed in before the call with their account email and customer ID, so they are already verified for that account. ${shared}`
+    : `caller: ${c.name}, a guest who signed in with a name and an email; not verified for any account. ${shared} Route as usual: escalations, disputes and refunds need no account lookup. Only if they ask about their own account's records, verify them with lookup_customer first, asking just for the company name.`;
+}
+
 /**
  * Per-call context the agent needs but the cached system prompt must not
- * contain (it would break the cache): today's date, for "tomorrow", and the
- * channel. Sent with the first user message only.
+ * contain (it would break the cache): today's date and the caller's local
+ * time (for "tomorrow at 3"), the channel, and who the caller is when they
+ * signed in first. Sent with the first user message only.
  */
-function callContext(channel: Channel, primer: string | null): string {
+function callContext(channel: Channel, primer: string | null, caller: CallerContext | null): string {
   const today = new Date().toISOString().slice(0, 10);
-  const lines = [`<call_context>channel: ${channel}; today: ${today}</call_context>`];
+  const tz = resolveCallerTimeZone(caller?.timezone);
+  const lines = [`<call_context>channel: ${channel}; today: ${today}; caller's local time: ${nowInZone(new Date(), tz)} (${tz})\n${caller ? callerContextLine(caller) : "caller: not signed in before the call. Collect their name and email yourself when needed, and pass them as user_name and user_email."}</call_context>`];
   if (primer) {
     lines.push(
       `<earlier_in_this_call>\n${primer}\n</earlier_in_this_call>\n` +
@@ -91,6 +113,9 @@ function callContext(channel: Channel, primer: string | null): string {
   }
   return lines.join("\n");
 }
+
+// Conversations whose caller identity the agent has been told about.
+const announced: Set<string> = ((globalThis as unknown as { __relaypayCallerAnnounced?: Set<string> }).__relaypayCallerAnnounced ??= new Set());
 
 /** When the tag is missing, infer the path from what happened, and say so in the log. */
 function inferPath(r: TurnResult): AnswerPath {
@@ -106,6 +131,8 @@ export type RunTurnInput = {
   onText: (text: string) => void;
   /** Earlier transcript, when a session has to be rebuilt mid-call. */
   primer?: string | null;
+  /** Who signed in on the voice page before this call, if anyone. */
+  caller?: CallerContext | null;
 };
 
 // One turn at a time per conversation. Vapi can send a second request while
@@ -162,7 +189,18 @@ async function runTurnNow(input: RunTurnInput): Promise<TurnResult & { turnIndex
   const earlier = await callerTranscripts(conversationId);
   // A session rebuilt mid-call (server restart) is new too, so the check is
   // on the session, not the turn number.
-  const content = session.turnsSent === 0 ? `${callContext(channel, input.primer ?? null)}\n\n${userText}` : userText;
+  const caller = input.caller ?? null;
+  let content: string;
+  if (session.turnsSent === 0) {
+    content = `${callContext(channel, input.primer ?? null, caller)}\n\n${userText}`;
+    if (caller) announced.add(conversationId);
+  } else if (caller && !announced.has(conversationId)) {
+    // The page reported the call after the first utterance had already gone.
+    content = `<call_context_update>${callerContextLine(caller)}</call_context_update>\n\n${userText}`;
+    announced.add(conversationId);
+  } else {
+    content = userText;
+  }
 
   let result: TurnResult;
   try {
@@ -232,6 +270,7 @@ export async function endCall(conversationId: string, endedReason: string, opts:
   const s = sessions.get(conversationId);
   sessions.delete(conversationId);
   generation.delete(conversationId);
+  announced.delete(conversationId);
   s?.close();
   const summary = await summariseConversation(conversationId).catch(() => null);
   const closed = await endConversation(conversationId, { endedReason, summary, error: opts.error });

@@ -25,6 +25,7 @@ Pass references exactly as heard, even as spoken words ("T X N nine zero zero on
 ### R-LOOK-4 · Verification
 
 - The company name plus the caller's own name, or the account email, or the account ID verifies a caller.
+- When the call context says the caller signed in as a customer, they are already verified for that account: don't ask them to verify again. Use the customer ID from the call context if you need `lookup_customer`.
 - When the caller says who they are ("I'm Amara from LagosLedger"), verify them with `lookup_customer` straight away, before any transaction or payout lookup. If they give only a name, ask for their company name or account email before looking anything up.
 - A call covers one account. The tools refuse records from any other account once the call is tied to one, verified or not; that refusal is final for the call (R-LOOK-7).
 - `verified` = false: ask once for their full name or the account email, then look up again.

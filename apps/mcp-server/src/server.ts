@@ -1,5 +1,5 @@
 /**
- * The RelayPay support MCP server: seven tools, one conversation per
+ * The RelayPay support MCP server: eight tools, one conversation per
  * connection context.
  *
  * Descriptions say when to use each tool, because that is what the model
@@ -26,6 +26,7 @@ import {
   logConversationEvent,
   logConversationEventShape,
 } from "./tools/actions.ts";
+import { bookCallback, bookCallbackShape } from "./tools/callbacks.ts";
 
 export const SERVER_NAME = "relaypay";
 
@@ -36,6 +37,7 @@ export const TOOL_NAMES = [
   "lookup_payout",
   "create_support_ticket",
   "create_escalation",
+  "book_callback",
   "log_conversation_event",
 ] as const;
 
@@ -133,10 +135,20 @@ export function buildServer(ctx: ToolContext): McpServer {
     "create_escalation",
     {
       description:
-        "Hand the case to a human specialist: account restrictions, compliance or verification concerns, disputes, refunds, cancellations, frustrated callers, or anything a record says needs a person. Needs the caller's name and email; a preferred callback time is optional.",
+        "Hand the case to a human specialist: account restrictions, compliance or verification concerns, disputes, refunds, cancellations, frustrated callers, or anything a record says needs a person. Needs the caller's name and email unless the call context says the server already has them; a preferred callback time is optional.",
       inputSchema: createEscalationShape,
     },
     (args) => runTool(ctx, "create_escalation", "Escalate to human support", args, createEscalation),
+  );
+
+  server.registerTool(
+    "book_callback",
+    {
+      description:
+        "Book a callback with a RelayPay specialist for this call's escalation, at the time the caller asked for. Books the first specialist free then and assigns them the case; if nobody is, returns alternatives and books nothing. Call only after create_escalation.",
+      inputSchema: bookCallbackShape,
+    },
+    (args) => runTool(ctx, "book_callback", "Book a specialist callback", args, bookCallback),
   );
 
   server.registerTool(

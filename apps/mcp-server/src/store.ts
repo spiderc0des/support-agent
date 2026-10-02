@@ -20,6 +20,10 @@ export type ConversationState = {
   customer_id: string | null;
   /** The account the call is bound to by an earlier lookup, before or without verification (0012). */
   linked_customer_id: string | null;
+  /** From the caller's "Know me" sign-in (0013): the server, not the model, holds these. */
+  caller_name: string | null;
+  caller_email: string | null;
+  caller_timezone: string | null;
   current_turn: number;
   status: string;
   channel: string;
@@ -96,6 +100,37 @@ export type EventRow = {
   source: "agent" | "system";
 };
 
+export type CallEscalation = {
+  escalation_id: string;
+  ticket_id: string;
+  user_name: string;
+  user_email: string;
+  category: string;
+  reason: string;
+  customer_id: string | null;
+  company_name: string | null;
+};
+
+export type CallbackAgent = {
+  profile_id: string;
+  name: string;
+  rank: number;
+  timezone: string;
+  work_days: number[];
+  work_start: string;
+  work_end: string;
+  has_calendar: boolean;
+};
+
+export type BookedSlot = { profile_id: string; slot_start: string };
+
+export type BookSlotResult = {
+  booking_id: string | null;
+  replaced_booking_id: string | null;
+  replaced_profile_id: string | null;
+  replaced_event_id: string | null;
+};
+
 export interface Store {
   getConversation(id: string): Promise<ConversationState | null>;
   /** For stdio / Inspector sessions that have no orchestrator creating the row. */
@@ -120,6 +155,21 @@ export interface Store {
   logRetrieval(row: RetrievalLogRow): Promise<void>;
   /** Resolves false (never throws) when the row could not be written. */
   logEvent(row: EventRow): Promise<boolean>;
+
+  /** The open escalation on this call, newest first, if any. */
+  escalationForConversation(conversationId: string): Promise<CallEscalation | null>;
+  /** Staff who take callbacks, in the admin's order. */
+  callbackAgents(): Promise<CallbackAgent[]>;
+  bookedSlots(from: Date, to: Date): Promise<BookedSlot[]>;
+  /** Atomic book-and-assign (0013 book_callback_slot); booking_id null when the slot was just taken. */
+  bookSlot(i: { escalationId: string; profileId: string; start: Date; end: Date; timezone: string; label: string }): Promise<BookSlotResult>;
+  /** Release a booking whose calendar event could not be created. */
+  releaseBooking(bookingId: string): Promise<void>;
+  setBookingEvent(bookingId: string, eventId: string, link: string | null): Promise<void>;
+  /** Keep a requested callback time as a preference when it can't be booked (never over a booked time). */
+  recordPreferredTime(escalationId: string, label: string): Promise<void>;
+  calendarToken(profileId: string): Promise<string | null>;
+  recordCalendarError(profileId: string, message: string): Promise<void>;
 
   /** Every support agent and admin with an email, for team notifications. */
   staffRecipients(): Promise<Recipient[]>;
@@ -147,7 +197,7 @@ export class SupabaseStore implements Store {
   async getConversation(id: string) {
     const { data, error } = await this.db
       .from("conversations")
-      .select("id, customer_id, linked_customer_id, current_turn, status, channel")
+      .select("id, customer_id, linked_customer_id, caller_name, caller_email, caller_timezone, current_turn, status, channel")
       .eq("id", id)
       .maybeSingle();
     check(error, "read conversation");
@@ -282,4 +332,99 @@ export class SupabaseStore implements Store {
     const { error } = await this.db.from("notifications").insert(row);
     if (error) console.error("[mcp] failed to record notification:", error.message);
   }
+
+  async escalationForConversation(conversationId: string) {
+    const { data, error } = await this.db
+      .from("escalations")
+      .select("escalation_id, ticket_id, user_name, user_email, category, reason, customer_id, customers(company_name)")
+      .eq("conversation_id", conversationId)
+      .neq("status", "closed")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    check(error, "read call escalation");
+    const row = one(data as (Omit<CallEscalation, "company_name"> & { customers: { company_name: string } | null })[] | null);
+    return row ? { ...row, company_name: row.customers?.company_name ?? null, customers: undefined } : null;
+  }
+
+  async callbackAgents() {
+    const [{ data, error }, { data: cals, error: calErr }] = await Promise.all([
+      this.db
+        .from("callback_agents")
+        .select("profile_id, rank, timezone, work_days, work_start, work_end, profiles!inner(full_name, email, role)")
+        .eq("takes_callbacks", true)
+        .order("rank"),
+      this.db.from("staff_calendars").select("profile_id"),
+    ]);
+    check(error, "read callback agents");
+    check(calErr, "read calendar connections");
+    const connected = new Set((cals ?? []).map((c) => c.profile_id as string));
+    type Row = { profile_id: string; rank: number; timezone: string; work_days: number[]; work_start: string; work_end: string; profiles: { full_name: string | null; email: string; role: string | null } };
+    return ((data ?? []) as unknown as Row[])
+      .filter((r) => r.profiles.role === "admin" || r.profiles.role === "support_agent")
+      .map((r) => ({
+        profile_id: r.profile_id,
+        name: r.profiles.full_name?.trim() || r.profiles.email.split("@")[0],
+        rank: r.rank,
+        timezone: r.timezone,
+        work_days: r.work_days,
+        work_start: r.work_start,
+        work_end: r.work_end,
+        has_calendar: connected.has(r.profile_id),
+      }));
+  }
+
+  async bookedSlots(from: Date, to: Date) {
+    const { data, error } = await this.db
+      .from("callback_bookings")
+      .select("profile_id, slot_start")
+      .eq("status", "booked")
+      .gte("slot_start", from.toISOString())
+      .lt("slot_start", to.toISOString());
+    check(error, "read bookings");
+    return (data ?? []) as BookedSlot[];
+  }
+
+  async bookSlot(i: { escalationId: string; profileId: string; start: Date; end: Date; timezone: string; label: string }) {
+    const { data, error } = await this.db.rpc("book_callback_slot", {
+      p_escalation: i.escalationId,
+      p_profile: i.profileId,
+      p_start: i.start.toISOString(),
+      p_end: i.end.toISOString(),
+      p_timezone: i.timezone,
+      p_label: i.label,
+    });
+    check(error, "book callback");
+    return one(data as BookSlotResult[]) ?? { booking_id: null, replaced_booking_id: null, replaced_profile_id: null, replaced_event_id: null };
+  }
+
+  async releaseBooking(bookingId: string) {
+    const { error } = await this.db.from("callback_bookings").update({ status: "cancelled", cancelled_at: new Date().toISOString() }).eq("id", bookingId);
+    check(error, "release booking");
+  }
+
+  async setBookingEvent(bookingId: string, eventId: string, link: string | null) {
+    const { error } = await this.db.from("callback_bookings").update({ google_event_id: eventId, google_event_link: link }).eq("id", bookingId);
+    check(error, "record calendar event");
+  }
+
+  async recordPreferredTime(escalationId: string, label: string) {
+    const { error } = await this.db
+      .from("escalations")
+      .update({ call_booked: true, preferred_time_text: label, updated_at: new Date().toISOString() })
+      .eq("escalation_id", escalationId)
+      .is("callback_at", null);
+    check(error, "record preferred time");
+  }
+
+  async calendarToken(profileId: string) {
+    const { data, error } = await this.db.from("staff_calendars").select("refresh_token").eq("profile_id", profileId).maybeSingle();
+    check(error, "read calendar connection");
+    return (data?.refresh_token as string | undefined) ?? null;
+  }
+
+  async recordCalendarError(profileId: string, message: string) {
+    await this.db.from("staff_calendars").update({ last_error: message.slice(0, 500), last_error_at: new Date().toISOString() }).eq("profile_id", profileId);
+  }
+
 }

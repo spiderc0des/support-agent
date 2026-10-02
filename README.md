@@ -10,7 +10,7 @@ caller ──voice──▶ Vapi (speech ⇄ text) ──Custom LLM──▶ app
                                                          │  one Claude Agent SDK session per call
                                                          │  (Haiku 4.5, six preloaded skills)
                                                          ▼
-                                                 apps/mcp-server  POST /mcp  (7 tools)
+                                                 apps/mcp-server  POST /mcp  (8 tools)
                                                          │
                                                          ▼
                                                      Supabase  seed data · knowledge base · logs
@@ -18,7 +18,7 @@ caller ──voice──▶ Vapi (speech ⇄ text) ──Custom LLM──▶ app
 
 - **Vapi** does speech only. It runs no model of its own: every turn is sent to our backend.
 - **Claude Agent SDK** decides each turn, using a long-lived session per call. It answers, clarifies, escalates or declines.
-- **MCP server** (built here): `search_knowledge_base`, `lookup_customer`, `lookup_transaction`, `lookup_payout`, `create_support_ticket`, `create_escalation`, `log_conversation_event`.
+- **MCP server** (built here): `search_knowledge_base`, `lookup_customer`, `lookup_transaction`, `lookup_payout`, `create_support_ticket`, `create_escalation`, `book_callback`, `log_conversation_event`.
 - **Supabase** holds the seed customers, transactions and payouts, the 37 knowledge-base chunks, and every runtime record.
 
 Design notes, the testing-evidence write-up and the one-pager live in
@@ -64,7 +64,7 @@ Authentication → Emails. Then add `<app>/auth/confirm` (and
 ### 2. Check everything offline first
 
 ```bash
-npm run check          # typecheck + lint:skills + 92 tests (no keys, no network, no cost)
+npm run check          # typecheck + lint:skills + 113 tests (no keys, no network, no cost)
 npm run prompt:size    # cached prefix must stay above Haiku's 4,096-token cache minimum
 ```
 
@@ -114,6 +114,8 @@ Invite-only sign-in (a magic link from `/login`). There are two roles:
 | Evaluations | yes | yes |
 | Admin: invite people, change roles, remove access, system and configuration status | no | yes |
 | Admin: edit the knowledge base and re-ingest it | no | yes |
+| Admin: set the callback order and each person's hours | no | yes |
+| Profile: connect your Google Calendar to receive callbacks | yes | yes |
 
 Every change to a ticket or escalation asks for confirmation first, and is
 recorded in `case_events`, which the ticket's Activity panel shows. On the
@@ -146,6 +148,42 @@ to restore it. Calls in progress use the new text from their next question;
 nothing is cached. `npm run kb:ingest` goes through the same function
 (`kb_publish`, migration 0011), so ingests from the repository appear in the
 history too, and running it publishes the repository file over console edits.
+
+### Know me: signing in before a call
+
+The voice page asks who is calling before the call starts:
+
+- **Customers** give their account email and customer ID. Both must match one
+  account, and the call starts already verified for it.
+- **Guests** give the name to be called by and an email for follow-up.
+
+The session lives in an httpOnly cookie (12 hours). When the call starts, the
+page passes it to Vapi as call metadata and reports the Vapi call id to
+`/api/caller/attach`; whichever arrives first fills in the conversation. The
+agent is told the caller's name, greets them by it, and never asks them to
+spell a name or an email: `create_escalation` takes both from the server. The
+agent never sees the email itself.
+
+### Callbacks booked on Google Calendar
+
+1. Each support agent connects their calendar on **Profile → Callbacks and
+   calendar** (Google sign-in; needs `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET`, see `.env.example`).
+2. An admin sets the order, the working days and hours, and the time zone of
+   each person on **Admin → Callback order**.
+3. When a caller asks for a callback, the agent turns their words into a local
+   time and calls `book_callback`. The MCP server tries each person in order:
+   the first one who is working then, free on Google Calendar, and not booked
+   by another caller gets it. The booking goes on their calendar with the
+   caller invited and a Meet link, and the ticket and escalation are assigned
+   to them. A unique index on (agent, slot) means two callers can never get
+   the same slot; the loser moves on to the next person.
+4. If nobody is free, nothing is booked and the nearest three free slots are
+   offered. If booking isn't possible at all (no calendars connected, an eval
+   run), the server keeps the requested time on the escalation as a
+   preference.
+
+Slots are 30 minutes, at least an hour ahead and at most 14 days ahead.
 
 ## Deploy (Railway)
 

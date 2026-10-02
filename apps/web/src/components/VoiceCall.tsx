@@ -45,7 +45,9 @@ const PHRASE = END_CALL_PHRASE.toLowerCase().replace(/\.$/, "");
 
 type ResetAction = { reset: true };
 
-export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assistantId: string }) {
+export type CallerIdentity = { sessionId: string; firstName: string };
+
+export function VoiceCall({ publicKey, assistantId, caller }: { publicKey: string; assistantId: string; caller?: CallerIdentity | null }) {
   const vapiRef = useRef<Vapi | null>(null);
   const ringRef = useRef<Ringback | null>(null);
   const [state, setState] = useState<CallState>("idle");
@@ -183,14 +185,31 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
       return;
     }
     try {
-      await vapi.start(assistantId);
+      // A caller who signed in ("Know me") is greeted by name, and the call
+      // carries their session so the agent never asks who they are.
+      const call = await vapi.start(
+        assistantId,
+        caller
+          ? {
+              firstMessage: `Hi ${caller.firstName}, you've reached RelayPay support. How can I help you today?`,
+              metadata: { callerSessionId: caller.sessionId },
+            }
+          : undefined,
+      );
+      if (caller && call?.id) {
+        void fetch("/api/caller/attach", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ callId: call.id }),
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error("[vapi] start failed", e);
       stopRing();
       setError("We couldn't start the call. Please try again in a moment.");
       setState("error");
     }
-  }, [assistantId, stopRing]);
+  }, [assistantId, caller, stopRing]);
 
   const stop = useCallback(() => {
     stopRing();

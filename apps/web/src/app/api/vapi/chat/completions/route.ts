@@ -10,7 +10,8 @@ import { randomUUID } from "node:crypto";
 import { runTurn, FALLBACK_REPLY } from "@/agent/turns";
 import { conversationByVapiCall, createConversation } from "@/agent/conversations";
 import { DEFAULT_MODEL } from "@/agent/support-session";
-import { channelOf, historyPrimer, newUserText, sseChunk, vapiAuthorised, type VapiChatRequest } from "@/lib/vapi";
+import { callerSessionIdOf, channelOf, historyPrimer, newUserText, sseChunk, vapiAuthorised, type VapiChatRequest } from "@/lib/vapi";
+import { callerForConversation } from "@/agent/caller-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,10 +61,13 @@ export async function POST(req: Request) {
             callerIdentifier: body.call?.customer?.number ?? null,
           }));
 
+        const caller = await callerForConversation(conversationId, callId, callerSessionIdOf(body.call));
+
         await runTurn({
           conversationId,
           channel,
           userText,
+          caller,
           primer: historyPrimer(messages),
           onText: (text) => send(sseChunk(id, { content: text })),
         });

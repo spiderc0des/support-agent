@@ -33,7 +33,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
 
   // Everything else in one round trip. The team is small, so all profiles
   // are fetched up front rather than waiting to learn whose names we need.
-  const [{ data: escalation }, { data: events }, { data: conv }, { data: turns }, { data: customer }, { data: notices }, { data: people }] = await Promise.all([
+  const [{ data: escalation }, { data: events }, { data: conv }, { data: turns }, { data: customer }, { data: notices }, { data: people }, { data: booking }] = await Promise.all([
     supabase.from("escalations").select("*").eq("ticket_id", id).maybeSingle(),
     supabase.from("case_events").select("*").eq("ticket_id", id).order("created_at"),
     ticket.conversation_id
@@ -45,6 +45,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
     ticket.customer_id ? supabase.from("customers").select("customer_id, company_name, plan, account_status, region").eq("customer_id", ticket.customer_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from("notifications").select("id, kind, recipients, status, detail, created_at").eq("ticket_id", id).order("created_at"),
     supabase.from("profiles").select("id, full_name, email"),
+    supabase.from("callback_bookings").select("profile_id, slot_start, caller_timezone, google_event_link").eq("ticket_id", id).eq("status", "booked").maybeSingle(),
   ]);
 
   const name = (pid: string | null | undefined) => {
@@ -120,7 +121,18 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                 </dd>
                 <dt>Callback</dt>
                 <dd>
-                  {escalation.callback_at ? (
+                  {booking ? (
+                    <>
+                      booked with <strong>{name(booking.profile_id)}</strong> for <When iso={booking.slot_start} />
+                      <span className="muted"> · {escalation.preferred_time_text} caller&apos;s time ({booking.caller_timezone})</span>
+                      {booking.google_event_link ? (
+                        <>
+                          {" "}
+                          · <a href={booking.google_event_link} target="_blank" rel="noreferrer">Calendar event</a>
+                        </>
+                      ) : null}
+                    </>
+                  ) : escalation.callback_at ? (
                     <>
                       confirmed for <When iso={escalation.callback_at} />
                     </>
@@ -257,7 +269,7 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                     <When iso={e.created_at} />
                   </span>
                   <span>
-                    <strong>{name(e.actor_id) ?? "Someone"}</strong> {ACTION_TEXT[e.action] ?? e.action}
+                    <strong>{e.actor_id ? (name(e.actor_id) ?? "Someone") : "The assistant"}</strong> {ACTION_TEXT[e.action] ?? e.action}
                     {e.action === "status_changed" ? ` from ${String(e.from_value).replace("_", " ")} to ${String(e.to_value).replace("_", " ")}` : ""}
                     {e.action === "assigned" ? ` to ${name(e.to_value)}` : ""}
                     {e.action === "callback_scheduled" && e.to_value ? (

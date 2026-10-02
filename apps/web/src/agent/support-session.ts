@@ -25,6 +25,7 @@ export const RELAYPAY_TOOLS = [
   "lookup_payout",
   "create_support_ticket",
   "create_escalation",
+  "book_callback",
   "log_conversation_event",
 ] as const;
 const ALLOWED = RELAYPAY_TOOLS.map((t) => `mcp__${MCP_SERVER_NAME}__${t}`);
