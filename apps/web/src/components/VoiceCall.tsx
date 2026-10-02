@@ -56,8 +56,19 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
     initialCaptions,
   );
   const [error, setError] = useState<string | null>(null);
+  // Call timer: counts from the moment the call connects, freezes when it ends.
+  const [connectedAt, setConnectedAt] = useState<number | null>(null);
+  const [endedAt, setEndedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const configured = Boolean(publicKey && assistantId);
+
+  useEffect(() => {
+    if (!connectedAt || endedAt) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [connectedAt, endedAt]);
 
   const stopRing = useCallback(() => {
     ringRef.current?.stop();
@@ -79,6 +90,7 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
     const finish = () => {
       if (ended) return;
       ended = true;
+      setEndedAt(Date.now());
       clearTimeout(closeTimer);
       clearTimeout(fallbackTimer);
       stopRing();
@@ -93,6 +105,8 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
     };
 
     vapi.on("call-start", () => {
+      setConnectedAt(Date.now());
+      setEndedAt(null);
       ended = false;
       saidGoodbye = false;
       setState("listening");
@@ -148,6 +162,8 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
   const start = useCallback(async () => {
     const vapi = vapiRef.current;
     if (!vapi) return;
+    setConnectedAt(null);
+    setEndedAt(null);
     setError(null);
     dispatch({ reset: true });
     setState("connecting");
@@ -190,13 +206,23 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
   }
 
   const inCall = state === "listening" || state === "thinking" || state === "speaking";
+  const elapsed = connectedAt ? (endedAt ?? now) - connectedAt : 0;
 
   return (
     <div>
-      <div className="status" role="status" aria-live="polite">
+      <div className="status">
         <span className="dot" data-state={state === "error" ? "error" : state} />
-        {LABEL[state]}
-        {muted && inCall ? " (muted)" : ""}
+        {/* Only the status text is announced; the timer ticks every second and would flood a screen reader. */}
+        <span role="status" aria-live="polite">
+          {LABEL[state]}
+          {muted && inCall ? " (muted)" : ""}
+        </span>
+        {connectedAt ? (
+          <span className="call-timer" aria-hidden={!endedAt}>
+            {endedAt ? "Lasted " : ""}
+            {formatDuration(elapsed)}
+          </span>
+        ) : null}
       </div>
 
       <div className="level" aria-hidden="true">
@@ -268,4 +294,13 @@ function Caption({ who, line }: { who: string; line: CaptionLine }) {
 export function isNormalHangUp(e: unknown): boolean {
   const text = JSON.stringify(e ?? "").toLowerCase();
   return text.includes("meeting has ended") || text.includes("ejection");
+}
+
+/** 75000 -> "1:15"; an hour or more -> "1:02:05". */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = String(total % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
 }

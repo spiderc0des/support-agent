@@ -98,6 +98,7 @@ textarea.field { resize: vertical; }
 .lede { margin: 0 0 12px; color: var(--muted); }
 .note.privacy { margin: 0 0 24px; }
 .status { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-weight: 600; }
+.call-timer { margin-left: auto; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex: none; }
 .dot[data-state="listening"] { background: var(--accent); }
 .dot[data-state="speaking"], .dot[data-state="thinking"] { background: var(--brand); }
