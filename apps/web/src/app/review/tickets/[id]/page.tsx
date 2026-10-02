@@ -31,12 +31,9 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
   const { data: ticket } = await supabase.from("support_tickets").select("*").eq("ticket_id", id).maybeSingle();
   if (!ticket) notFound();
 
-  const { data: notices } = await supabase
-    .from("notifications")
-    .select("id, kind, recipients, status, detail, created_at")
-    .eq("ticket_id", id)
-    .order("created_at");
-  const [{ data: escalation }, { data: events }, { data: conv }, { data: turns }, { data: customer }] = await Promise.all([
+  // Everything else in one round trip. The team is small, so all profiles
+  // are fetched up front rather than waiting to learn whose names we need.
+  const [{ data: escalation }, { data: events }, { data: conv }, { data: turns }, { data: customer }, { data: notices }, { data: people }] = await Promise.all([
     supabase.from("escalations").select("*").eq("ticket_id", id).maybeSingle(),
     supabase.from("case_events").select("*").eq("ticket_id", id).order("created_at"),
     ticket.conversation_id
@@ -46,12 +43,10 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
       ? supabase.from("conversation_turns").select("turn_index, user_transcript, assistant_response, answer_type").eq("conversation_id", ticket.conversation_id).order("turn_index")
       : Promise.resolve({ data: [] }),
     ticket.customer_id ? supabase.from("customers").select("customer_id, company_name, plan, account_status, region").eq("customer_id", ticket.customer_id).maybeSingle() : Promise.resolve({ data: null }),
+    supabase.from("notifications").select("id, kind, recipients, status, detail, created_at").eq("ticket_id", id).order("created_at"),
+    supabase.from("profiles").select("id, full_name, email"),
   ]);
 
-  const personIds = [ticket.deleted_by, ticket.assigned_to, escalation?.assigned_to, ...(events ?? []).map((e) => e.actor_id), ...(events ?? []).filter((e) => e.action === "assigned").map((e) => e.to_value)].filter(Boolean) as string[];
-  const { data: people } = personIds.length
-    ? await supabase.from("profiles").select("id, full_name, email").in("id", [...new Set(personIds)])
-    : { data: [] as { id: string; full_name: string | null; email: string }[] };
   const name = (pid: string | null | undefined) => {
     if (!pid) return null;
     if (pid === me.id) return "You";

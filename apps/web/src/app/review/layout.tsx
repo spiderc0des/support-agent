@@ -30,15 +30,15 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   }
 
   const supabase = await supabaseServer();
-  // A ticket with an escalation is counted once, as an escalation.
-  const { data: escalated } = await supabase.from("escalations").select("ticket_id").is("deleted_at", null);
-  const escalatedIds = (escalated ?? []).map((e) => `"${e.ticket_id}"`).join(",");
-  let ticketQuery = supabase.from("support_tickets").select("ticket_id", { count: "exact", head: true }).neq("status", "closed").is("deleted_at", null);
-  if (escalatedIds) ticketQuery = ticketQuery.not("ticket_id", "in", `(${escalatedIds})`);
-  const [tickets, escalations] = await Promise.all([
-    ticketQuery,
-    supabase.from("escalations").select("escalation_id", { count: "exact", head: true }).neq("status", "closed").is("deleted_at", null),
+  // One round trip for both counts (this runs on every page). A ticket with
+  // an escalation is counted once, as an escalation.
+  const [{ data: openTickets }, { data: escalated }] = await Promise.all([
+    supabase.from("support_tickets").select("ticket_id").neq("status", "closed").is("deleted_at", null),
+    supabase.from("escalations").select("ticket_id, status").is("deleted_at", null),
   ]);
+  const escalatedIds = new Set((escalated ?? []).map((e) => e.ticket_id));
+  const tickets = { count: (openTickets ?? []).filter((t) => !escalatedIds.has(t.ticket_id)).length };
+  const escalations = { count: (escalated ?? []).filter((e) => e.status !== "closed").length };
 
   return (
     <div className="page console">

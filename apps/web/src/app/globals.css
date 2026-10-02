@@ -269,3 +269,34 @@ a.tile:hover { border-color: var(--brand); }
 
 .delete-control { margin-top: 4px; }
 .deleted-banner { margin: 0 0 14px; }
+
+/* ---- Loading skeleton (review/loading.tsx) ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skeleton { background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%); background-size: 200% 100%; border-radius: 6px; animation: skeleton 1.2s ease-in-out infinite; }
+.skeleton-title { height: 28px; width: 220px; margin: 4px 0 20px; }
+.skeleton-line { height: 14px; margin: 10px 0; }
+.skeleton-line.short { width: 60%; }
+@keyframes skeleton { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+
+/* ---- Knowledge editor (review/admin/knowledge) ---- */
+.kb-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.kb-main, .kb-side { min-width: 0; }
+.kb-text { display: block; min-height: 60vh; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.55; tab-size: 2; }
+.kb-text.small { min-height: 220px; }
+.kb-keywords { margin-top: 12px; }
+.kb-keywords summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--brand); }
+.kb-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 14px; }
+.kb-outline { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; font-size: 14px; }
+.kb-outline li { display: flex; flex-direction: column; }
+.kb-section { margin: 10px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.kb-outline li:first-child .kb-section { margin-top: 0; }
+.kb-chunk { display: flex; flex-direction: column; padding: 4px 0 4px 10px; border-left: 2px solid var(--border); }
+.kb-chunk code, .kb-report code { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.kb-note { display: block; font-size: 14px; margin-top: 2px; }
+.kb-report { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+.kb-report .notice { margin: 0; }
+.kb-report.stale { opacity: .7; }
+.kb-h3 { font-size: 14px; margin: 4px 0 0; }
+.kb-misses { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 960px) { .kb-layout { grid-template-columns: 1fr; } .kb-text { min-height: 45vh; } }

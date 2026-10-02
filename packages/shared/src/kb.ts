@@ -9,6 +9,22 @@
  * Chunk ids are stable slugs, so retrieval logs and the gold retrieval set
  * keep meaning the same thing across re-ingests.
  */
+/**
+ * The score (0..1, from match_kb) a chunk needs to count as approved context.
+ *
+ * Tuned by tests/retrieval.test.ts: every gold question's answer scores well
+ * above it, and off-topic questions score nothing. Change it only with that
+ * test green. Lives here because the MCP server, the ingest script and the
+ * admin knowledge editor all measure against it.
+ */
+export const KB_MATCH_THRESHOLD = 0.35;
+
+/** Recall@3 on the gold set a knowledge-base change must keep. */
+export const KB_MIN_RECALL = 0.9;
+
+/** Generous for ~40 short sections; refuses a pasted novel. */
+export const KB_MAX_BYTES = 200_000;
+
 export type KbChunk = {
   id: string;
   section: string;
@@ -101,4 +117,35 @@ export function chunkKnowledgeBase(markdown: string, keywords: Record<string, st
     seen.add(c.id);
   }
   return chunks;
+}
+
+export type GoldQuery = { q: string; expect: string[] | "none" };
+
+export type PreparedKb = {
+  chunks: KbChunk[];
+  /** Keyword entries kept: only those naming a chunk that exists. */
+  keywords: Record<string, string>;
+  /** Keyword entries dropped because their chunk no longer exists (a renamed or removed heading). */
+  orphanKeywords: string[];
+  /** Gold questions whose expected chunk no longer exists: they will miss. */
+  orphanGold: string[];
+};
+
+/**
+ * Validate and chunk a knowledge-base document for publishing. Throws with a
+ * message fit to show an admin when the document can't be published at all.
+ */
+export function prepareKnowledgeBase(markdown: string, keywords: Record<string, string>, gold: GoldQuery[] = []): PreparedKb {
+  if (!markdown.trim()) throw new Error("The knowledge base is empty.");
+  if (new TextEncoder().encode(markdown).length > KB_MAX_BYTES) throw new Error(`The knowledge base is over ${KB_MAX_BYTES / 1000} KB.`);
+  for (const [k, v] of Object.entries(keywords)) {
+    if (typeof v !== "string") throw new Error(`Keywords for "${k}" must be a string of words.`);
+  }
+  const chunks = chunkKnowledgeBase(markdown, keywords);
+  if (!chunks.length) throw new Error("No chunks found. Put each topic under a ## section heading, with ### headings for its parts.");
+  const ids = new Set(chunks.map((c) => c.id));
+  const orphanKeywords = Object.keys(keywords).filter((k) => k !== "//" && !ids.has(k));
+  const kept = Object.fromEntries(Object.entries(keywords).filter(([k]) => k === "//" || ids.has(k)));
+  const orphanGold = [...new Set(gold.flatMap((g) => (g.expect === "none" ? [] : g.expect.filter((id) => !ids.has(id)))))];
+  return { chunks, keywords: kept, orphanKeywords, orphanGold };
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { supabaseAdmin } from "@relaypay/shared/supabase";
 import type { StaffRole } from "@relaypay/shared/enums";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -20,19 +21,28 @@ export class AuthError extends Error {
   }
 }
 
-export async function currentProfile(): Promise<Profile | null> {
+/**
+ * Cached per request: the layout and the page both ask, and a page render
+ * should cost one profile lookup, not two.
+ *
+ * The session is checked with getClaims(), which verifies the token's
+ * signature locally (no call to Supabase Auth). The role still comes from
+ * the profiles table on every request, so removing someone's access takes
+ * effect on their next click, not when their token expires.
+ */
+export const currentProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await supabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const { data: auth } = await supabase.auth.getClaims();
+  const claims = auth?.claims;
+  if (!claims?.sub) return null;
+  const email = typeof claims.email === "string" ? claims.email : "";
   // Service role: a brand-new user may race the signup trigger, and a missing
   // profile should read as "no role", not as an error page.
-  const { data } = await supabaseAdmin().from("profiles").select("id, email, full_name, role").eq("id", user.id).maybeSingle();
-  if (!data) return { id: user.id, email: user.email ?? "", full_name: null, role: null };
+  const { data } = await supabaseAdmin().from("profiles").select("id, email, full_name, role").eq("id", claims.sub).maybeSingle();
+  if (!data) return { id: claims.sub, email, full_name: null, role: null };
   const role = data.role === "admin" || data.role === "support_agent" ? data.role : null;
   return { id: data.id, email: data.email, full_name: data.full_name, role };
-}
+});
 
 export async function requireStaff(): Promise<Profile & { role: StaffRole }> {
   const p = await currentProfile();

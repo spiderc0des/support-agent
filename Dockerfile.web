@@ -43,6 +43,10 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/web ./apps/web
+# The repository knowledge base and gold retrieval set: the admin knowledge
+# editor starts from the file and checks every change against the gold set.
+COPY --from=builder /app/data ./data
+ENV DATA_DIR=/app/data
 WORKDIR /app/apps/web
 EXPOSE 3000
 CMD ["sh", "-c", "npx next start -p ${PORT:-3000}"]

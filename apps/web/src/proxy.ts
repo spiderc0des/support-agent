@@ -26,12 +26,13 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // getUser(), not getSession(): only getUser() revalidates the token with Supabase.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() verifies the access token's signature locally against the
+  // project's published signing key (ES256, cached), refreshing the session
+  // first if it has expired. getUser() made a network round trip to Supabase
+  // Auth on every click, which was most of the delay between pages.
+  const { data } = await supabase.auth.getClaims();
 
-  if (!user) {
+  if (!data?.claims?.sub) {
     const url = publicUrl("/login", request);
     url.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(url);

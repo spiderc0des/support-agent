@@ -40,6 +40,10 @@ export default async function AdminPage() {
     db.from("eval_runs").select("id, model, started_at, passed, total, cost_usd").is("deleted_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
     mcpHealthy(),
   ]);
+  const [{ data: kbLive }, { count: kbChunks }] = await Promise.all([
+    db.from("kb_versions").select("version, published_at, recall").order("version", { ascending: false }).limit(1).maybeSingle(),
+    db.from("kb_chunks").select("id", { count: "exact", head: true }),
+  ]);
 
   // Recently deleted, across every kind that can be deleted.
   const [{ data: delTickets }, { data: delConvs }, { data: delRuns }, { data: delEscs }] = await Promise.all([
@@ -88,6 +92,24 @@ export default async function AdminPage() {
       <div className="page-head">
         <h1>Admin</h1>
       </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Knowledge base</h2>
+          <Link href="/review/admin/knowledge">Edit and re-ingest</Link>
+        </div>
+        <p className="muted">
+          {kbLive ? (
+            <>
+              Version {kbLive.version}, published <When iso={kbLive.published_at} mode="relative" />
+              {kbLive.recall !== null ? `, recall@3 ${(kbLive.recall * 100).toFixed(0)}%` : ""}.
+            </>
+          ) : (
+            "Loaded from the repository; not yet edited here."
+          )}{" "}
+          {kbChunks ?? 0} chunks the agent can search.
+        </p>
+      </section>
 
       <section className="panel">
         <h2>Invite someone</h2>

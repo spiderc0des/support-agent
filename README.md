@@ -53,7 +53,7 @@ Create a project, then:
 ```bash
 npm run db:migrate                # needs SUPABASE_DB_URL and psql; or paste supabase/migrations/*.sql in order
 npm run db:seed                   # customers, transactions, payouts
-npm run kb:ingest                 # knowledge base -> kb_chunks
+npm run kb:ingest                 # knowledge base -> kb_chunks (checked against the gold set; --check to measure only)
 npm run seed:admin -- you@company.com   # first admin for /review
 ```
 
@@ -64,7 +64,7 @@ Authentication → Emails. Then add `<app>/auth/confirm` (and
 ### 2. Check everything offline first
 
 ```bash
-npm run check          # typecheck + lint:skills + 55 tests (no keys, no network, no cost)
+npm run check          # typecheck + lint:skills + 92 tests (no keys, no network, no cost)
 npm run prompt:size    # cached prefix must stay above Haiku's 4,096-token cache minimum
 ```
 
@@ -89,7 +89,7 @@ curl -s localhost:3000/api/chat -H "authorization: Bearer $DEV_API_TOKEN" \
 ### 4. Evaluate
 
 ```bash
-npm run eval                          # 17 scenarios on AGENT_MODEL; results -> eval_runs / evaluations
+npm run eval                          # 19 scenarios on AGENT_MODEL; results -> eval_runs / evaluations
 npm run eval -- --only S5,S7 --repeat 3
 npm run eval -- --model claude-sonnet-5
 npm run eval -- --voice               # records scenario 9 from the latest real call
@@ -113,6 +113,7 @@ Invite-only sign-in (a magic link from `/login`). There are two roles:
 | Conversations: transcript, tool calls, knowledge used, events | yes | yes |
 | Evaluations | yes | yes |
 | Admin: invite people, change roles, remove access, system and configuration status | no | yes |
+| Admin: edit the knowledge base and re-ingest it | no | yes |
 
 Every change to a ticket or escalation asks for confirmation first, and is
 recorded in `case_events`, which the ticket's Activity panel shows. On the
@@ -120,6 +121,31 @@ voice page, starting and ending a call also ask for confirmation.
 
 The first admin is created with `npm run seed:admin -- you@company.com`.
 Everyone after that is invited from Admin.
+
+### Editing the knowledge base
+
+Admins edit the approved knowledge base at **Admin → Knowledge base**
+(`/review/admin/knowledge`) and re-ingest it without a deploy:
+
+1. Edit the Markdown. Each `##` is a section and each `###` under it is one
+   searchable chunk; the outline beside the editor shows the chunks and their
+   ids as you type. Search keywords (synonyms per chunk) are under *Advanced*.
+2. **Check changes.** The new chunks are loaded into search inside a
+   transaction, the 39 gold questions in `data/retrieval-gold.json` run against
+   them with the real `match_kb`, and the transaction is rolled back. The
+   report lists added, changed and removed chunks, recall@3, and any question
+   that would stop finding its answer.
+3. **Publish and re-ingest.** The same run, kept. Publishing is refused if any
+   gold question that works today would stop working, recall@3 falls below
+   90%, or an off-topic question starts matching. An admin can still
+   *Publish anyway*, which is marked on the version.
+
+Every publish is a row in `kb_versions` (text, keywords, chunk count, recall,
+who, why). The history panel loads any earlier version back into the editor
+to restore it. Calls in progress use the new text from their next question;
+nothing is cached. `npm run kb:ingest` goes through the same function
+(`kb_publish`, migration 0011), so ingests from the repository appear in the
+history too, and running it publishes the repository file over console edits.
 
 ## Deploy (Railway)
 
