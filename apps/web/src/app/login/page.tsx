@@ -46,7 +46,7 @@ function LoginForm() {
               </button>
             </p>
           ) : (
-            <form onSubmit={onSubmit}>
+            <form onSubmit={onSubmit} className="stack-form">
               <label htmlFor="email" className="label">
                 Email address
               </label>

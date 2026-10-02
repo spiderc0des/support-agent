@@ -24,7 +24,7 @@ export default async function Overview() {
       .select("escalation_id, ticket_id, category, user_name, preferred_time_text, callback_at, status, created_at, assigned_to")
       .neq("status", "closed")
       .is("deleted_at", null)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(8),
     supabase
       .from("support_tickets")
@@ -32,7 +32,7 @@ export default async function Overview() {
       .eq("assigned_to", profile.id)
       .neq("status", "closed")
       .is("deleted_at", null)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(8),
     unassignedTickets(supabase),
     supabase.from("conversations").select("id, channel, status, total_cost_usd").gte("started_at", since).neq("channel", "eval").is("deleted_at", null),

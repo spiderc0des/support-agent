@@ -19,6 +19,7 @@ import type {
   TicketResult,
   ToolCallRow,
 } from "../../apps/mcp-server/src/store.ts";
+import type { NotificationRow } from "../../packages/shared/src/notify.ts";
 
 const dateOnly = (v: unknown) => (v instanceof Date ? v.toISOString().slice(0, 10) : (v as string | null));
 
@@ -31,7 +32,7 @@ export class PgliteStore implements Store {
   }
 
   getConversation(id: string) {
-    return this.one<ConversationState>("select id, customer_id, current_turn, status from conversations where id = $1", [id]);
+    return this.one<ConversationState>("select id, customer_id, current_turn, status, channel from conversations where id = $1", [id]);
   }
 
   async ensureConversation(id: string, channel: string) {
@@ -122,5 +123,20 @@ export class PgliteStore implements Store {
       [r.conversation_id, r.turn_index, r.event_type, r.summary, JSON.stringify(r.metadata), r.source],
     );
     return true;
+  }
+
+  async staffRecipients() {
+    const { rows } = await this.db.query<{ email: string; full_name: string | null }>(
+      "select email, full_name from profiles where role in ('support_agent', 'admin')",
+    );
+    return rows.map((r) => ({ email: r.email, name: r.full_name }));
+  }
+
+  async logNotification(r: NotificationRow) {
+    await this.db.query(
+      `insert into notifications (kind, ticket_id, escalation_id, conversation_id, subject, recipients, status, detail)
+       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [r.kind, r.ticket_id, r.escalation_id, r.conversation_id, r.subject, r.recipients, r.status, r.detail],
+    );
   }
 }

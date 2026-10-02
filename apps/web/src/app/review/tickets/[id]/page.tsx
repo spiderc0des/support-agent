@@ -31,6 +31,11 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
   const { data: ticket } = await supabase.from("support_tickets").select("*").eq("ticket_id", id).maybeSingle();
   if (!ticket) notFound();
 
+  const { data: notices } = await supabase
+    .from("notifications")
+    .select("id, kind, recipients, status, detail, created_at")
+    .eq("ticket_id", id)
+    .order("created_at");
   const [{ data: escalation }, { data: events }, { data: conv }, { data: turns }, { data: customer }] = await Promise.all([
     supabase.from("escalations").select("*").eq("ticket_id", id).maybeSingle(),
     supabase.from("case_events").select("*").eq("ticket_id", id).order("created_at"),
@@ -234,6 +239,23 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                   <span>Escalated to a specialist ({escalation.escalation_id})</span>
                 </li>
               ) : null}
+              {(notices ?? []).map((n) => (
+                <li key={n.id}>
+                  <span className="t-when">
+                    <When iso={n.created_at} />
+                  </span>
+                  <span>
+                    {n.status === "sent"
+                      ? `Support team emailed (${n.recipients.length})`
+                      : n.status === "partial"
+                        ? `Support team emailed, some failed (${n.recipients.length})`
+                        : n.status === "failed"
+                          ? "Team email failed"
+                          : "Team email not sent"}
+                    {n.detail ? <span className="t-note">{n.detail}</span> : null}
+                  </span>
+                </li>
+              ))}
               {(events ?? []).map((e) => (
                 <li key={e.id}>
                   <span className="t-when">

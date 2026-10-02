@@ -11,6 +11,7 @@
  */
 import { supabaseAdmin } from "@relaypay/shared/supabase";
 import type { AnswerPath, Channel, Confidence } from "@relaypay/shared/enums";
+import { notifyStaff } from "@relaypay/shared/notify";
 
 const db = () => supabaseAdmin();
 
@@ -167,7 +168,25 @@ export async function openFallbackTicket(conversationId: string, turnIndex: numb
     p_turn_index: turnIndex,
   });
   warn("open fallback ticket", error);
-  return (data as { ticket_id: string }[] | null)?.[0]?.ticket_id ?? null;
+  const ticketId = (data as { ticket_id: string; deduplicated?: boolean }[] | null)?.[0]?.ticket_id ?? null;
+  if (ticketId) {
+    // The caller only heard a fallback; tell the team so a person follows up.
+    const { data: conv } = await db().from("conversations").select("channel").eq("id", conversationId).maybeSingle();
+    void notifyStaff(
+      { kind: "agent_error", ticketId, conversationId, channel: (conv?.channel as string) ?? "unknown", reason },
+      {
+        recipients: async () => {
+          const { data: staff } = await db().from("profiles").select("email, full_name").in("role", ["support_agent", "admin"]);
+          return (staff ?? []).map((p) => ({ email: p.email as string, name: (p.full_name as string | null) ?? null }));
+        },
+        record: async (row) => {
+          const { error: e } = await db().from("notifications").insert(row);
+          warn("record notification", e);
+        },
+      },
+    );
+  }
+  return ticketId;
 }
 
 export async function endConversation(

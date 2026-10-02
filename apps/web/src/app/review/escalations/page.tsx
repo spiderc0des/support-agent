@@ -16,7 +16,7 @@ const VIEWS = [
   { key: "all", label: "All" },
 ] as const;
 
-/** Cases that need a specialist, oldest first: they have been waiting longest. */
+/** Cases that need a specialist, newest first. "Waiting since" shows how long each has waited. */
 export default async function Escalations({ searchParams }: { searchParams: Promise<{ view?: string; category?: string }> }) {
   const sp = await searchParams;
   const view = VIEWS.some((v) => v.key === sp.view) ? sp.view! : "open";
@@ -27,7 +27,7 @@ export default async function Escalations({ searchParams }: { searchParams: Prom
     .from("escalations")
     .select("escalation_id, ticket_id, conversation_id, customer_id, user_name, user_email, category, reason, call_booked, preferred_time_text, callback_at, status, assigned_to, created_at")
     .is("deleted_at", null)
-    .order("created_at", { ascending: view === "closed" || view === "all" ? false : true })
+    .order("created_at", { ascending: false })
     .limit(200);
   if (view === "open") q = q.neq("status", "closed");
   if (view === "callback") q = q.eq("call_booked", true).neq("status", "closed");

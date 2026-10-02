@@ -8,6 +8,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CustomerRow, PayoutRow, TransactionRow } from "./lib/safe-summary.ts";
+import type { NotificationRow, Recipient } from "@relaypay/shared/notify";
 
 export type FullCustomer = CustomerRow & { contact_name: string | null; contact_email: string | null };
 export type FullTransaction = TransactionRow & { amount: number; currency: string; destination_country: string | null };
@@ -18,6 +19,7 @@ export type ConversationState = {
   customer_id: string | null;
   current_turn: number;
   status: string;
+  channel: string;
 };
 
 export type KbHit = { id: string; source_title: string; summary: string; content: string; score: number };
@@ -113,6 +115,10 @@ export interface Store {
   logRetrieval(row: RetrievalLogRow): Promise<void>;
   /** Resolves false (never throws) when the row could not be written. */
   logEvent(row: EventRow): Promise<boolean>;
+
+  /** Every support agent and admin with an email, for team notifications. */
+  staffRecipients(): Promise<Recipient[]>;
+  logNotification(row: NotificationRow): Promise<void>;
 }
 
 // ------------------------------------------------------------ Supabase -----
@@ -136,7 +142,7 @@ export class SupabaseStore implements Store {
   async getConversation(id: string) {
     const { data, error } = await this.db
       .from("conversations")
-      .select("id, customer_id, current_turn, status")
+      .select("id, customer_id, current_turn, status, channel")
       .eq("id", id)
       .maybeSingle();
     check(error, "read conversation");
@@ -253,5 +259,16 @@ export class SupabaseStore implements Store {
     const { error } = await this.db.from("conversation_events").insert(row);
     if (error) console.error("[mcp] failed to record event:", error.message);
     return !error;
+  }
+
+  async staffRecipients() {
+    const { data, error } = await this.db.from("profiles").select("email, full_name").in("role", ["support_agent", "admin"]);
+    check(error, "read support team");
+    return (data ?? []).map((p) => ({ email: p.email as string, name: (p.full_name as string | null) ?? null }));
+  }
+
+  async logNotification(row: NotificationRow) {
+    const { error } = await this.db.from("notifications").insert(row);
+    if (error) console.error("[mcp] failed to record notification:", error.message);
   }
 }
