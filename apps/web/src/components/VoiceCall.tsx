@@ -172,7 +172,10 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
     stopRing();
     ringRef.current = startRingback();
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Only to trigger the permission prompt early; Vapi opens its own
+      // capture. Close this one, or the browser keeps a second mic open.
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach((t) => t.stop());
     } catch {
       stopRing();
       setError("Microphone access is blocked. Allow it in your browser settings to talk to support.");
@@ -197,8 +200,11 @@ export function VoiceCall({ publicKey, assistantId }: { publicKey: string; assis
   const toggleMute = useCallback(() => {
     const vapi = vapiRef.current;
     if (!vapi) return;
-    vapi.setMuted(!vapi.isMuted());
-    setMuted(vapi.isMuted());
+    setMuted((wasMuted) => {
+      const next = !wasMuted;
+      setMicMuted(vapi, next);
+      return next;
+    });
   }, []);
 
   if (!configured) {
@@ -303,4 +309,22 @@ export function formatDuration(ms: number): string {
   const m = Math.floor((total % 3600) / 60);
   const sec = String(total % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+/**
+ * Mute that actually stops the microphone. Vapi's setMuted() alone left the
+ * caller audible: a real call transcribed "What can you help me with?" while
+ * the page showed "(muted)", most likely because the noise-cancellation
+ * layer keeps its own processed track running. So the browser's microphone
+ * tracks are disabled too: a disabled track sends silence, whatever sits
+ * downstream of it.
+ */
+function setMicMuted(vapi: Vapi, mute: boolean) {
+  vapi.setMuted(mute);
+  type AudioTracks = { persistentTrack?: MediaStreamTrack; track?: MediaStreamTrack };
+  const local = (vapi.getDailyCallObject()?.participants() as { local?: { tracks?: { audio?: AudioTracks }; audioTrack?: MediaStreamTrack } } | undefined)?.local;
+  const tracks = new Set([local?.tracks?.audio?.persistentTrack, local?.tracks?.audio?.track, local?.audioTrack].filter((t): t is MediaStreamTrack => Boolean(t)));
+  tracks.forEach((t) => {
+    t.enabled = !mute;
+  });
 }
