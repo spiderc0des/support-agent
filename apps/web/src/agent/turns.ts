@@ -21,6 +21,7 @@ import {
   recordTurn,
 } from "./conversations.ts";
 import { summariseConversation } from "./summary.ts";
+import { notifyUnassignedCases } from "../lib/case-notify.ts";
 
 const IDLE_MS = 10 * 60_000;
 
@@ -274,5 +275,9 @@ export async function endCall(conversationId: string, endedReason: string, opts:
   s?.close();
   const summary = await summariseConversation(conversationId).catch(() => null);
   const closed = await endConversation(conversationId, { endedReason, summary, error: opts.error });
-  if (closed) await recordSystemEvent(conversationId, "call_ended", `Call ended: ${endedReason}`);
+  if (closed) {
+    await recordSystemEvent(conversationId, "call_ended", `Call ended: ${endedReason}`);
+    // A case left without an owner (no callback booked) goes to the admins.
+    void notifyUnassignedCases(conversationId).catch((err: unknown) => console.error("[notify] unassigned cases:", err instanceof Error ? err.message : err));
+  }
 }

@@ -130,11 +130,9 @@ export class PgliteStore implements Store {
     return true;
   }
 
-  async staffRecipients() {
-    const { rows } = await this.db.query<{ email: string; full_name: string | null }>(
-      "select email, full_name from profiles where role in ('support_agent', 'admin')",
-    );
-    return rows.map((r) => ({ email: r.email, name: r.full_name }));
+  async staffRecipient(profileId: string) {
+    const r = await this.one<{ email: string; full_name: string | null }>("select email, full_name from profiles where id = $1", [profileId]);
+    return r ? { email: r.email, name: r.full_name } : null;
   }
 
   async logNotification(r: NotificationRow) {

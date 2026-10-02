@@ -474,7 +474,7 @@ test("an escalation never reuses a deleted ticket the model names", async () => 
 });
 
 // ------------------------------------------------- team notifications -----
-import { pendingNotifications } from "../apps/mcp-server/src/tools/actions.ts";
+import { pendingNotifications } from "../apps/mcp-server/src/lib/notify.ts";
 const settle = () => Promise.all([...pendingNotifications]);
 
 async function staffMember(email: string, role: "admin" | "support_agent") {
@@ -482,32 +482,13 @@ async function staffMember(email: string, role: "admin" | "support_agent") {
   await db.query("insert into profiles (id, email, role) values ($1, $2, $3) on conflict (id) do update set role = excluded.role", [rows[0].id, email, role]);
 }
 
-test("a new ticket on a real call records a team notification; eval calls never email", async () => {
+test("creating a ticket or an escalation emails nobody: the team hears when someone owns it", async () => {
   await staffMember("agent@relaypay.test", "support_agent");
   const live = await session();
   await db.query("update conversations set channel = 'web_voice' where id = $1", [live.conversationId]);
   const t = await live.call("create_support_ticket", { category: "payment", priority: "medium", summary: "Delayed transfer the caller wants chased." });
+  const e = await live.call("create_escalation", { user_name: "Efua", user_email: "efua@accrastack.example", category: "account", reason: "Account locked; caller needs a specialist." });
   await settle();
-  const rows = (await db.query<Record<string, any>>("select * from notifications where ticket_id = $1", [t.body.ticket_id])).rows;
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].kind, "ticket_created");
-  assert.ok(rows[0].recipients.includes("agent@relaypay.test"));
-  assert.equal(rows[0].status, "skipped", "no Brevo key in tests, and that is recorded");
-  assert.match(rows[0].detail, /BREVO_API_KEY/);
-
-  const evalCall = await session(); // channel 'eval'
-  const t2 = await evalCall.call("create_support_ticket", { category: "payment", priority: "medium", summary: "An eval scenario's ticket." });
-  await settle();
-  assert.equal((await db.query("select 1 from notifications where ticket_id = $1", [t2.body.ticket_id])).rows.length, 0);
-});
-
-test("an escalation sends one case email, not one per record; a retry sends none", async () => {
-  const live = await session();
-  await db.query("update conversations set channel = 'phone' where id = $1", [live.conversationId]);
-  const args = { user_name: "Efua", user_email: "efua@accrastack.example", category: "account", reason: "Account locked; caller needs a specialist." };
-  const e = await live.call("create_escalation", args);
-  await live.call("create_escalation", args);
-  await settle();
-  const rows = (await db.query<Record<string, any>>("select kind, escalation_id from notifications where ticket_id = $1", [e.body.ticket_id])).rows;
-  assert.deepEqual(rows, [{ kind: "escalation_created", escalation_id: e.body.escalation_id }]);
+  const rows = (await db.query("select 1 from notifications where ticket_id in ($1, $2)", [t.body.ticket_id, e.body.ticket_id])).rows;
+  assert.equal(rows.length, 0);
 });

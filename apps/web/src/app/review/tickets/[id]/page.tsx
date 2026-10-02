@@ -252,13 +252,21 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
                     <When iso={n.created_at} />
                   </span>
                   <span>
-                    {n.status === "sent"
-                      ? `Support team emailed (${n.recipients.length})`
-                      : n.status === "partial"
-                        ? `Support team emailed, some failed (${n.recipients.length})`
-                        : n.status === "failed"
-                          ? "Team email failed"
-                          : "Team email not sent"}
+                    {(() => {
+                      const who =
+                        n.kind === "case_assigned"
+                          ? `${name(people?.find((p) => p.email === n.recipients[0])?.id) ?? n.recipients[0] ?? "Assignee"} (assigned)`
+                          : n.kind === "case_unassigned"
+                            ? `Admins, to assign an owner (${n.recipients.length})`
+                            : `Support team (${n.recipients.length})`;
+                      return n.status === "sent"
+                        ? `Emailed ${who}`
+                        : n.status === "partial"
+                          ? `Emailed ${who}; some failed`
+                          : n.status === "failed"
+                            ? `Email to ${who} failed`
+                            : `Email to ${who} not sent`;
+                    })()}
                     {n.detail ? <span className="t-note">{n.detail}</span> : null}
                   </span>
                 </li>

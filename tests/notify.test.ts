@@ -44,3 +44,29 @@ test("eval and test channels never email and leave no record", async () => {
   assert.equal(status, "skipped");
   assert.equal(rows.length, 0);
 });
+
+test("an assignment email is addressed to the owner and says when the callback is", () => {
+  const e = buildStaffEmail(
+    {
+      kind: "case_assigned", ticketId: "TCK-1055", escalationId: "ESC-141", conversationId: null, channel: "web_voice",
+      title: "Account access blocked", assignedBy: "The assistant", callerName: "Patrick",
+      callback: { when: "Saturday 3 October at 10:30 am", link: "https://calendar.example/ev" },
+    },
+    "https://x.test",
+  );
+  assert.equal(e.subject, "Callback booked with you: Saturday 3 October at 10:30 am");
+  assert.match(e.text, /When: Saturday 3 October at 10:30 am \(your time\)/);
+  assert.match(e.html, /because the case is assigned to you/);
+  assert.match(e.html, /calendar\.example\/ev/);
+  assert.doesNotMatch(e.text, /View the call/, "no conversation, no call link");
+});
+
+test("a console assignment always emails, even with call channels filtered", async () => {
+  const rows: NotificationRow[] = [];
+  const status = await notifyStaff(
+    { kind: "case_assigned", ticketId: "TCK-1", escalationId: null, conversationId: null, channel: "console", title: "x", assignedBy: "Ada", callerName: null, callback: null },
+    { recipients: async () => [{ email: "b@x.test", name: null }], record: async (r) => void rows.push(r), send: async () => ({ ok: true }), env: { NOTIFY_CHANNELS: "phone" } },
+  );
+  assert.equal(status, "sent");
+  assert.deepEqual(rows[0].recipients, ["b@x.test"]);
+});

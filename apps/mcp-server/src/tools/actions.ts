@@ -19,7 +19,6 @@ import {
 import type { ConversationState } from "../store.ts";
 import { spokenReference, type ToolContext, type ToolHandler } from "../lib/tooling.ts";
 import { isPlausibleEmail, normalizeEmail, normalizeReference } from "../lib/normalize.ts";
-import { notifyStaff, type StaffEvent } from "@relaypay/shared/notify";
 
 type Links = { customerId: string | null; transactionId: string | null; payoutId: string | null; notes: string[] };
 
@@ -56,20 +55,6 @@ async function resolveLinks(
     payoutId: payout && own(payout.customer_id) ? payout.payout_id : null,
     notes,
   };
-}
-
-/**
- * Email the team about a new case. Not awaited: the tool answers the agent
- * straight away and the email follows; a mail failure is recorded, never
- * surfaced to the caller.
- */
-export const pendingNotifications = new Set<Promise<unknown>>();
-function notifyTeam(ctx: ToolContext, ev: StaffEvent) {
-  const p = notifyStaff(ev, {
-    recipients: () => ctx.store.staffRecipients(),
-    record: (row) => ctx.store.logNotification(row),
-  }).finally(() => pendingNotifications.delete(p));
-  pendingNotifications.add(p);
 }
 
 function conversationIdNote(arg: string | undefined, conversation: ConversationState): string[] {
@@ -110,18 +95,6 @@ export const createSupportTicket: ToolHandler<TicketArgs> = async (args, convers
     turnIndex: conversation.current_turn,
   });
   const notes = [...links.notes, ...conversationIdNote(args.conversation_id, conversation)];
-  if (!ticket.deduplicated) {
-    notifyTeam(ctx, {
-      kind: "ticket_created",
-      ticketId: ticket.ticket_id,
-      conversationId: conversation.id,
-      channel: conversation.channel,
-      category: args.category,
-      priority: args.priority,
-      summary: args.summary.trim(),
-      customerId: links.customerId,
-    });
-  }
 
   return {
     status: "success",
@@ -214,23 +187,6 @@ export const createEscalation: ToolHandler<EscalationArgs> = async (args, conver
     turnIndex: conversation.current_turn,
   });
 
-  if (!escalation.deduplicated) {
-    notifyTeam(ctx, {
-      kind: "escalation_created",
-      ticketId: escalation.ticket_id,
-      escalationId: escalation.escalation_id,
-      conversationId: conversation.id,
-      channel: conversation.channel,
-      category: args.category,
-      priority: args.priority ?? "high",
-      reason: args.reason.trim(),
-      callerName: userName,
-      callerEmail: email,
-      contactMatchesRecord: escalation.contact_matches_record,
-      preferredTime: args.preferred_time?.trim() || null,
-      customerId: links.customerId,
-    });
-  }
 
   const followUp = args.preferred_time?.trim()
     ? `A callback with a RelayPay specialist is being booked for ${userName}. The reference is ${escalation.escalation_id}.`

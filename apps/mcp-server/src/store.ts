@@ -171,8 +171,8 @@ export interface Store {
   calendarToken(profileId: string): Promise<string | null>;
   recordCalendarError(profileId: string, message: string): Promise<void>;
 
-  /** Every support agent and admin with an email, for team notifications. */
-  staffRecipients(): Promise<Recipient[]>;
+  /** One staff member's address, for an email about a case assigned to them. */
+  staffRecipient(profileId: string): Promise<Recipient | null>;
   logNotification(row: NotificationRow): Promise<void>;
 }
 
@@ -322,10 +322,10 @@ export class SupabaseStore implements Store {
     return !error;
   }
 
-  async staffRecipients() {
-    const { data, error } = await this.db.from("profiles").select("email, full_name").in("role", ["support_agent", "admin"]);
-    check(error, "read support team");
-    return (data ?? []).map((p) => ({ email: p.email as string, name: (p.full_name as string | null) ?? null }));
+  async staffRecipient(profileId: string) {
+    const { data, error } = await this.db.from("profiles").select("email, full_name").eq("id", profileId).maybeSingle();
+    check(error, "read staff member");
+    return data ? { email: data.email as string, name: (data.full_name as string | null) ?? null } : null;
   }
 
   async logNotification(row: NotificationRow) {

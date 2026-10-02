@@ -3,6 +3,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@relaypay/shared/supabase";
 import { RECORD_STATUSES } from "@relaypay/shared/enums";
 import { CasePlanError, planCaseChange, type EscalationRow, type TicketRow } from "./case-plan";
+import { notifyAssignee } from "./case-notify.ts";
 
 /**
  * Working a ticket or an escalation. The only writes staff make.
@@ -25,7 +26,7 @@ export const CaseChange = z
   .refine((c) => c.status || c.assign || c.note || c.callback_at, { message: "Nothing to change" });
 export type CaseChange = z.infer<typeof CaseChange>;
 
-type Actor = { id: string; role: "support_agent" | "admin" };
+type Actor = { id: string; role: "support_agent" | "admin"; full_name?: string | null; email?: string };
 
 export class CaseError extends Error {
   constructor(message: string, readonly status: 400 | 403 | 404 | 409) {
@@ -96,6 +97,15 @@ export async function applyCaseChange(kind: "ticket" | "escalation", id: string,
   if (plan.events.length) {
     const { error: evErr } = await db.from("case_events").insert(plan.events);
     if (evErr) throw new Error(`Saved, but the audit entry failed: ${evErr.message}`);
+  }
+  // Only the new owner is told, and only when someone else assigned them.
+  if (assignee && assignee !== actor.id && plan.events.some((e) => e.action === "assigned")) {
+    void notifyAssignee({
+      ticketId: ticket.ticket_id,
+      escalationId: escalation?.escalation_id ?? null,
+      assigneeId: assignee,
+      actorName: actor.full_name?.trim() || actor.email?.split("@")[0] || "An admin",
+    }).catch((err) => console.error("[notify] assignee email failed:", err instanceof Error ? err.message : err));
   }
   return { changed: plan.events.map((e) => e.action), case: { ticket_id: ticket.ticket_id, escalation_id: escalation?.escalation_id ?? null } };
 }

@@ -17,6 +17,7 @@ import { PgliteStore } from "./lib/pglite-store.ts";
 import { buildServer } from "../apps/mcp-server/src/server.ts";
 import type { CalendarPort } from "../apps/mcp-server/src/lib/calendar.ts";
 import type { NewEvent } from "../packages/shared/src/google-calendar.ts";
+import { pendingNotifications } from "../apps/mcp-server/src/lib/notify.ts";
 
 const NOW = new Date("2026-10-05T08:00:00Z");
 let db: PGlite;
@@ -236,4 +237,20 @@ test("the database refuses a double booking of one agent's slot, whatever the co
   assert.ok(first.booking_id);
   assert.equal(second.booking_id, null);
   assert.deepEqual(await assignedTo(b.escalationId!), { e: null, t: null }, "the loser is not assigned");
+});
+
+test("a booked callback emails only the agent it's booked with", async () => {
+  const cal = fakeCalendar();
+  const c = await call({ calendar: cal });
+  const r = await c.run("book_callback", { time: "2026-10-14T11:00" });
+  assert.equal(r.body.specialist_first_name, "Ada");
+  await Promise.all([...pendingNotifications]);
+  const { rows } = await db.query<{ kind: string; recipients: string[]; subject: string }>(
+    "select kind, recipients, subject from notifications where escalation_id = $1",
+    [c.escalationId],
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].kind, "case_assigned");
+  assert.deepEqual(rows[0].recipients, ["ada@relaypay.example"], "not Bayo, not the whole team");
+  assert.equal(rows[0].subject, "Callback booked with you: Wednesday 14 October at 11:00 am");
 });

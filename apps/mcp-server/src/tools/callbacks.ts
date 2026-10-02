@@ -33,6 +33,7 @@ import {
 import type { CallbackAgent, ConversationState } from "../store.ts";
 import type { ToolContext, ToolHandler, ToolOutcome } from "../lib/tooling.ts";
 import { googleCalendar } from "../lib/calendar.ts";
+import { notifyInBackground } from "../lib/notify.ts";
 
 export const bookCallbackShape = {
   time: z
@@ -179,6 +180,27 @@ export const bookCallback: ToolHandler<Args> = async ({ time }, conversation, ct
     if (booking.replaced_event_id && booking.replaced_profile_id) {
       await calendar.remove(booking.replaced_profile_id, booking.replaced_event_id).catch(() => {});
     }
+
+    // Only the person who now owns the case is told: the booking is on their
+    // calendar and the case is assigned to them.
+    notifyInBackground(
+      ctx,
+      {
+        kind: "case_assigned",
+        ticketId: escalation.ticket_id,
+        escalationId: escalation.escalation_id,
+        conversationId: conversation.id,
+        channel: conversation.channel,
+        title: escalation.reason,
+        assignedBy: "The assistant",
+        callerName: escalation.user_name,
+        callback: { when: spokenSlot(start, agent.timezone), link: event.htmlLink },
+      },
+      async () => {
+        const r = await ctx.store.staffRecipient(agent.profile_id);
+        return r ? [r] : [];
+      },
+    );
 
     return {
       status: "success",

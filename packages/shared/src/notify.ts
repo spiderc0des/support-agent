@@ -1,6 +1,13 @@
 /**
  * Emailing the support team when something needs a person.
  *
+ * Who gets what (only the person who has to act):
+ *   case_assigned    the one person a case was just assigned to: by a
+ *                    booked callback, or by someone else in the console
+ *   case_unassigned  admins only: a call ended leaving a case nobody owns
+ *   ticket_created / escalation_created / agent_error  earlier versions
+ *                    emailed everyone on creation; kept so old rows render
+ *
  * Sent through Brevo's HTTPS API, not SMTP: Railway blocks outbound SMTP on
  * its free tier (week 5 hit exactly this). One email per recipient, so
  * nobody sees the rest of the team's addresses.
@@ -45,6 +52,29 @@ export type StaffEvent =
       customerId: string | null;
     }
   | {
+      kind: "case_assigned";
+      ticketId: string;
+      escalationId: string | null;
+      conversationId: string | null;
+      /** "console" for an assignment made by a person; otherwise the call's channel. */
+      channel: string;
+      title: string;
+      assignedBy: string;
+      callerName: string | null;
+      /** Set when the assignment came from a booked callback. */
+      callback: { when: string; link: string | null } | null;
+    }
+  | {
+      kind: "case_unassigned";
+      ticketId: string;
+      escalationId: string | null;
+      conversationId: string | null;
+      channel: string;
+      title: string;
+      callerName: string | null;
+      preferredTime: string | null;
+    }
+  | {
       kind: "agent_error";
       ticketId: string;
       conversationId: string;
@@ -58,7 +88,7 @@ export type NotificationRow = {
   kind: StaffEvent["kind"];
   ticket_id: string;
   escalation_id: string | null;
-  conversation_id: string;
+  conversation_id: string | null;
   subject: string;
   recipients: string[];
   status: "sent" | "partial" | "failed" | "skipped";
@@ -80,13 +110,35 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export function buildStaffEmail(ev: StaffEvent, appUrl: string): BuiltEmail {
   const base = appUrl.replace(/\/$/, "");
   const ticketUrl = `${base}/review/tickets/${ev.ticketId}`;
-  const callUrl = `${base}/review/conversations/${ev.conversationId}`;
+  const callUrl = ev.conversationId ? `${base}/review/conversations/${ev.conversationId}` : null;
   const via = ev.channel === "phone" ? "a phone call" : ev.channel === "web_voice" ? "a web voice call" : `the ${ev.channel} channel`;
 
   let subject: string;
   let lead: string;
   let rows: [string, string][];
-  if (ev.kind === "escalation_created") {
+  if (ev.kind === "case_assigned") {
+    const ref = ev.escalationId ? `${ev.ticketId} + ${ev.escalationId}` : ev.ticketId;
+    subject = ev.callback ? `Callback booked with you: ${ev.callback.when}` : `${ev.escalationId ?? ev.ticketId} is assigned to you`;
+    lead = ev.callback
+      ? `The assistant booked a callback with you and assigned you the case. It's on your Google Calendar with a Meet link, and the caller has the invite.`
+      : `${ev.assignedBy} assigned you this case.`;
+    rows = [
+      ["About", ev.title],
+      ...(ev.callerName ? ([["Caller", ev.callerName]] as [string, string][]) : []),
+      ...(ev.callback ? ([["When", `${ev.callback.when} (your time)`]] as [string, string][]) : []),
+      ["Case", ref],
+    ];
+  } else if (ev.kind === "case_unassigned") {
+    const ref = ev.escalationId ? `${ev.ticketId} + ${ev.escalationId}` : ev.ticketId;
+    subject = `Needs an owner: ${ev.escalationId ?? ev.ticketId}`;
+    lead = `A call via ${via} ended with this case unassigned. Assign it to someone so it gets picked up.`;
+    rows = [
+      ["About", ev.title],
+      ...(ev.callerName ? ([["Caller", ev.callerName]] as [string, string][]) : []),
+      ["Callback", ev.preferredTime ? `requested: ${ev.preferredTime}` : "not requested"],
+      ["Case", ref],
+    ];
+  } else if (ev.kind === "escalation_created") {
     subject = `Escalation ${ev.escalationId}: ${ev.category}, ${ev.priority} priority`;
     lead = `A caller needs a specialist. The agent escalated this during ${via}.`;
     rows = [
@@ -119,12 +171,12 @@ export function buildStaffEmail(ev: StaffEvent, appUrl: string): BuiltEmail {
 ${rows.map(([k, v]) => `<tr><td style="padding:3px 16px 3px 0;color:#5b6675;vertical-align:top;white-space:nowrap;">${esc(k)}</td><td style="padding:3px 0;">${esc(v)}</td></tr>`).join("\n")}
 </table>
 <p style="margin:22px 0 0;"><a href="${esc(ticketUrl)}" style="display:inline-block;padding:10px 18px;background:#17365d;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Open the case</a>
-&nbsp; <a href="${esc(callUrl)}" style="font-size:14px;color:#1f6f80;">View the call</a></p>
+${callUrl ? `&nbsp; <a href="${esc(callUrl)}" style="font-size:14px;color:#1f6f80;">View the call</a>` : ""}${ev.kind === "case_assigned" && ev.callback?.link ? `&nbsp; <a href="${esc(ev.callback.link)}" style="font-size:14px;color:#1f6f80;">Calendar event</a>` : ""}</p>
 </td></tr></table>
-<p style="margin:16px 0 0;font-size:12px;color:#5b6675;">You receive this because you're on the RelayPay support team.</p>
+<p style="margin:16px 0 0;font-size:12px;color:#5b6675;">${ev.kind === "case_assigned" ? "You receive this because the case is assigned to you." : ev.kind === "case_unassigned" ? "You receive this because you're a RelayPay support admin." : "You receive this because you're on the RelayPay support team."}</p>
 </td></tr></table></body></html>`;
 
-  const text = [subject, "", lead, "", ...rows.map(([k, v]) => `${k}: ${v}`), "", `Open the case: ${ticketUrl}`, `View the call: ${callUrl}`].join("\n");
+  const text = [subject, "", lead, "", ...rows.map(([k, v]) => `${k}: ${v}`), "", `Open the case: ${ticketUrl}`, ...(callUrl ? [`View the call: ${callUrl}`] : [])].join("\n");
   return { subject, html, text };
 }
 
@@ -155,14 +207,16 @@ export async function sendViaBrevo(to: Recipient, email: BuiltEmail, env: Record
 export async function notifyStaff(ev: StaffEvent, deps: NotifyDeps): Promise<NotificationRow["status"]> {
   const env = deps.env ?? process.env;
   const channels = (env.NOTIFY_CHANNELS ?? "web_voice,phone").split(",").map((c) => c.trim()).filter(Boolean);
-  if (!channels.includes(ev.channel)) return "skipped"; // eval runs and test channels: not recorded, not sent
+  // Eval runs and test channels: not recorded, not sent. A person assigning
+  // a case in the console always notifies.
+  if (ev.channel !== "console" && !channels.includes(ev.channel)) return "skipped";
 
   const appUrl = env.APP_URL || env.NEXT_PUBLIC_APP_URL || "";
   const email = buildStaffEmail(ev, appUrl);
   const base = {
     kind: ev.kind,
     ticket_id: ev.ticketId,
-    escalation_id: ev.kind === "escalation_created" ? ev.escalationId : null,
+    escalation_id: "escalationId" in ev ? (ev.escalationId ?? null) : null,
     conversation_id: ev.conversationId,
     subject: email.subject,
   };
